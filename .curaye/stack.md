@@ -27,7 +27,7 @@ updated: 2026-07-21
 
 ## apps/web
 
-- **Framework:** Astro (static output)
+- **Framework:** Astro 7.x (static output)
 - **Styling:** Tailwind CSS v4
 - **Deployment:** GitHub Pages from the sync repo (zero infrastructure)
 
