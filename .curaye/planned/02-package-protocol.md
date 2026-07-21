@@ -1,7 +1,7 @@
 ---
 id: package-protocol
 title: "@curaye/protocol — Schema, Parser & Validator"
-status: ready
+status: building
 effort: m
 impact: high
 desire: high
