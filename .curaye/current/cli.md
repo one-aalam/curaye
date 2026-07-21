@@ -40,9 +40,20 @@ updated: 2026-07-21
 
 | Command | Description |
 |---|---|
-| `curaye sync [--project <id>] [--all] [--pull\|--push]` | Pushes (default) or pulls `.curaye/` content. `--all` syncs every registered project. |
+| `curaye sync [--project <id>] [--all] [--pull\|--push]` | Pushes (default) or pulls `.curaye/` content. `--all` syncs every registered project. After each project sync, runs agent file tracking (non-fatal). |
 | `curaye sync status` | Reports ahead/behind/clean state vs remote. |
 | `curaye sync init <remote-url>` | One-time setup: clones or initialises the sync repo at `~/.curaye/sync/`. |
+
+## Agent steering
+
+Tracks `CLAUDE.md`, `AGENTS.md`, and `*AGENTS*.md` files across registered projects. Change detection and log writes happen during `curaye sync`.
+
+| Command | Description |
+|---|---|
+| `curaye agents list [--project <id>]` | Lists all tracked agent steering files for a project with their last-change date and truncated hash. |
+| `curaye agents log [--project <id>] [--since YYYY-MM-DD]` | Shows all agent change log entries, optionally filtered by date. Includes AI-generated summaries when present. |
+| `curaye agents diff <date> [--project <id>]` | Shows all log entries recorded on `<date>`, including structured metadata and diff summary body. |
+| `curaye agents detect [--project <id>]` | Detects agent steering files in the project directory without writing any changes (dry-run). |
 
 ## Search
 

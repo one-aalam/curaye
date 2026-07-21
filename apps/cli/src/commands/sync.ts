@@ -2,7 +2,8 @@ import type { Command } from 'commander'
 import os from 'os'
 import path from 'path'
 import { intro, outro, spinner } from '@clack/prompts'
-import { ProjectRegistry } from '@curaye/core'
+import { ProjectRegistry, trackAgentChanges } from '@curaye/core'
+import type { AgentChangeType } from '@curaye/core'
 import {
   push,
   pull,
@@ -16,9 +17,32 @@ import {
 import type { SyncConfig } from '@curaye/sync'
 import { SHARED_DIR } from '@curaye/core'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
-import { resolveProject } from '../lib/context.js'
+import { resolveProject, today } from '../lib/context.js'
+import { readAiConfig, createProvider } from '@curaye/ai'
 
 const DEFAULT_LOCAL_REPO = path.join(os.homedir(), '.curaye', 'sync')
+
+async function buildSummaryGenerator(): Promise<
+  ((filePath: string, changeType: AgentChangeType, prevHash: string | null, currHash: string | null) => Promise<string>) | undefined
+> {
+  try {
+    const config = await readAiConfig()
+    if (!config) return undefined
+    const provider = createProvider(config)
+    return async (filePath: string, changeType: AgentChangeType) => {
+      const content = await import('fs/promises').then((m) => m.readFile(filePath, 'utf8')).catch(() => '')
+      const messages = [
+        {
+          role: 'user' as const,
+          content: `An agent steering file (${path.basename(filePath)}) was ${changeType}. Summarize what changed in 1-3 plain English sentences. If created or deleted, briefly describe what the file contains or contained.\n\nFile content:\n${content.slice(0, 4000)}`,
+        },
+      ]
+      return provider.complete(messages)
+    }
+  } catch {
+    return undefined
+  }
+}
 
 async function loadSyncConfig(): Promise<SyncConfig> {
   // For now, localRepo is always the default location.
@@ -72,6 +96,15 @@ export function registerSync(program: Command): void {
               if (!isJsonMode()) s.stop(`${project.id} failed`)
               die(err instanceof Error ? err.message : String(err))
             }
+
+            // Track agent file changes for each project
+            try {
+              const summaryGen = await buildSummaryGenerator()
+              const latestProject = await ProjectRegistry.find(project.id) ?? project
+              await trackAgentChanges(latestProject, project.path, curiyePath, today(), summaryGen)
+            } catch {
+              // Non-fatal
+            }
           }
 
           await syncRegistry(projects, config)
@@ -114,6 +147,15 @@ export function registerSync(program: Command): void {
         } catch (err) {
           if (!isJsonMode()) s.stop('Sync failed')
           die(err instanceof Error ? err.message : String(err))
+        }
+
+        // Track agent file changes
+        try {
+          const summaryGen = await buildSummaryGenerator()
+          const latestProject = await ProjectRegistry.find(project.id) ?? project
+          await trackAgentChanges(latestProject, project.path, curiyePath, today(), summaryGen)
+        } catch {
+          // Non-fatal — agent tracking failure should not block sync
         }
 
         const projects = await ProjectRegistry.read()

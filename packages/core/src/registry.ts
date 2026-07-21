@@ -3,6 +3,7 @@ import path from 'path'
 import os from 'os'
 import { load as yamlLoad, dump as yamlDump } from 'js-yaml'
 import { RegistryError } from './errors.js'
+import type { AgentFile } from './agent-tracker.js'
 
 export interface RegistryProject {
   id: string
@@ -12,6 +13,7 @@ export interface RegistryProject {
   sync_remote?: string
   added: string
   adopts?: string[]
+  agent_files?: AgentFile[]
 }
 
 interface RegistryFile {

@@ -69,6 +69,13 @@ interface RegistryProject {
   sync_remote?: string
   added:        string          // ISO date
   adopts?:      string[]        // shared layer doc refs, e.g. 'shared/decisions/why-sqlite'
+  agent_files?: AgentFile[]     // tracked agent steering files; populated by trackAgentChanges
+}
+
+interface AgentFile {
+  path:            string   // relative to project root (e.g. 'CLAUDE.md', '.claude/CLAUDE.md')
+  last_seen_hash:  string   // 'sha256:<hex>'
+  last_changed:    string   // ISO date of last detected change
 }
 ```
 
@@ -105,6 +112,56 @@ interface SharedNotification {
 ```
 
 Review snapshots (diff baselines) are stored in `~/.curaye/shared-reviews/<projectId>/<docId>.md`. Notifications are stored in `~/.curaye/notifications.yaml`.
+
+## Agent file tracking
+
+Detects and tracks `CLAUDE.md`, `AGENTS.md`, `*AGENTS*.md` files at the project root, and `CLAUDE.md` up to two directory levels deep (e.g. `.claude/CLAUDE.md`). Changes are recorded as dated Markdown files in `.curaye/agent-log/`.
+
+```ts
+// Scan the project directory for agent steering files. Returns a Map<relativePath, sha256Hash>.
+async function detectAgentFiles(projectPath: string): Promise<Map<string, string>>
+
+// Compare detected files against registry, write log entries for changes, update registry.
+// generateSummary is optional — called at the CLI layer when an AI provider is configured.
+async function trackAgentChanges(
+  project: RegistryProject,
+  projectPath: string,
+  curiyePath: string,
+  today: string,
+  generateSummary?: (filePath: string, changeType: AgentChangeType, prevHash: string | null, currHash: string | null) => Promise<string>,
+): Promise<AgentChange[]>
+
+// Write a single dated log entry atomically to .curaye/agent-log/YYYY-MM-DD-{basename}.md.
+async function writeAgentLogEntry(
+  curiyePath: string,
+  entry: AgentLogEntry,
+  date: string,
+  body?: string,
+): Promise<string>
+
+// Read all agent log entries, optionally filtered to entries on or after `since` (YYYY-MM-DD).
+async function readAgentLog(
+  curiyePath: string,
+  since?: string,
+): Promise<Array<{ entry: AgentLogEntry; body: string; filename: string }>>
+
+type AgentChangeType = 'created' | 'modified' | 'deleted'
+
+interface AgentLogEntry {
+  date:          string
+  file:          string
+  change_type:   AgentChangeType
+  previous_hash: string | null
+  current_hash:  string | null
+}
+
+interface AgentChange {
+  entry:       AgentLogEntry
+  logFilePath: string
+}
+```
+
+Log files are named `YYYY-MM-DD-{basename}.md` — one file per (date, agent file) pair. Frontmatter holds structured metadata; body holds the optional AI-generated summary.
 
 ## Error types
 

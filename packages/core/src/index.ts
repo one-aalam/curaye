@@ -1,4 +1,6 @@
 export { readDocument, writeDocument } from './document.js'
+export { detectAgentFiles, trackAgentChanges, writeAgentLogEntry, readAgentLog } from './agent-tracker.js'
+export type { AgentFile, AgentLogEntry, AgentChangeType, AgentChange } from './agent-tracker.js'
 export { scanProject } from './scanner.js'
 export type { ProjectIndex, ScanWarning } from './scanner.js'
 export { ProjectRegistry } from './registry.js'
