@@ -65,7 +65,7 @@ All AI commands require a configured provider.
 
 | Command | Description |
 |---|---|
-| `curaye bootstrap [path]` | Runs the project bootstrap flow (spec `13-project-bootstrap`). |
+| `curaye bootstrap [path]` | Runs the project bootstrap interview and scaffolds `.curaye/`. Asks 5 questions (description, target user, app type, shared decisions, first feature), drafts `prd.md` and first planned spec via AI if configured, seeds `stack.md` from shared layer, copies selected shared decisions with `source` field, and auto-registers the project. Errors cleanly if `.curaye/` already exists. |
 | `curaye promote <file> --to <shared\|decisions\|patterns\|design>` | Promotes a document to the shared layer (spec `17-pattern-promotion`). |
 
 ## Binary distribution
