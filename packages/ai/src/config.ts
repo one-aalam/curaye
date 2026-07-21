@@ -2,29 +2,54 @@ import os from 'os'
 import path from 'path'
 import fs from 'fs/promises'
 import { load as yamlLoad } from 'js-yaml'
-import type { ProviderConfig } from './types.js'
+import type { AiConfig } from './types.js'
 
-const CONFIG_PATH = path.join(os.homedir(), '.curaye', 'ai.yaml')
+const CONFIG_PATH = path.join(os.homedir(), '.curaye', 'config.yaml')
 
-interface AiConfigFile {
-  provider?: string
-  model?: string
-  api_key?: string
-  base_url?: string
+interface RawConfig {
+  ai?: {
+    provider?: string
+    ollama?:    { baseUrl?: string; model?: string }
+    anthropic?: { apiKey?: string; model?: string }
+    openai?:    { apiKey?: string; model?: string }
+  }
 }
 
-export async function loadProviderConfig(): Promise<ProviderConfig | null> {
+export async function readAiConfig(): Promise<AiConfig | null> {
   try {
     const raw = await fs.readFile(CONFIG_PATH, 'utf8')
-    const parsed = yamlLoad(raw) as AiConfigFile | null
-    if (!parsed?.provider) return null
+    const parsed = yamlLoad(raw) as RawConfig | null
+    const ai = parsed?.ai
+    if (!ai?.provider) return null
+
+    const provider = ai.provider as AiConfig['provider']
+    if (provider !== 'ollama' && provider !== 'anthropic' && provider !== 'openai') return null
+
     return {
-      provider: parsed.provider as ProviderConfig['provider'],
-      ...(parsed.model !== undefined && { model: parsed.model }),
-      ...(parsed.api_key !== undefined && { apiKey: parsed.api_key }),
-      ...(parsed.base_url !== undefined && { baseUrl: parsed.base_url }),
+      provider,
+      ...(ai.ollama?.baseUrl && ai.ollama.model
+        ? { ollama: { baseUrl: ai.ollama.baseUrl, model: ai.ollama.model } }
+        : {}),
+      ...(ai.anthropic?.apiKey && ai.anthropic.model
+        ? { anthropic: { apiKey: ai.anthropic.apiKey, model: ai.anthropic.model } }
+        : {}),
+      ...(ai.openai?.apiKey && ai.openai.model
+        ? { openai: { apiKey: ai.openai.apiKey, model: ai.openai.model } }
+        : {}),
     }
   } catch {
     return null
+  }
+}
+
+export function isAvailable(config: AiConfig | null): boolean {
+  if (config === null) return false
+  switch (config.provider) {
+    case 'ollama':
+      return config.ollama !== undefined
+    case 'anthropic':
+      return config.anthropic?.apiKey !== undefined
+    case 'openai':
+      return config.openai?.apiKey !== undefined
   }
 }

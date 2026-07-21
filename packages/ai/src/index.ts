@@ -1,3 +1,4 @@
-export type { Message, Provider, ProviderConfig, ProviderName } from './types.js'
-export { ProviderUnavailableError, ProviderConfigError } from './errors.js'
-export { loadProviderConfig } from './config.js'
+export type { Message, CompletionOptions, Provider, AiConfig } from './types.js'
+export { ProviderConfigError, ProviderUnavailableError, ProviderAuthError } from './errors.js'
+export { readAiConfig, isAvailable } from './config.js'
+export { createProvider } from './factory.js'

@@ -1,20 +1,25 @@
 export interface Message {
-  role: 'user' | 'assistant' | 'system'
+  role: 'system' | 'user' | 'assistant'
   content: string
 }
 
-export interface Provider {
-  name: string
-  complete(messages: Message[]): Promise<string>
-  stream(messages: Message[]): AsyncIterable<string>
-  isAvailable(): Promise<boolean>
+export interface CompletionOptions {
+  model?:       string
+  maxTokens?:   number
+  temperature?: number
 }
 
-export type ProviderName = 'anthropic' | 'openai' | 'ollama'
+export interface Provider {
+  complete(messages: Message[], opts?: CompletionOptions): Promise<string>
+  stream(messages: Message[], opts?: CompletionOptions): AsyncIterable<string>
+  embed(text: string): Promise<number[]>
+  readonly name: string
+  readonly defaultModel: string
+}
 
-export interface ProviderConfig {
-  provider: ProviderName
-  model?: string | undefined
-  apiKey?: string | undefined
-  baseUrl?: string | undefined
+export interface AiConfig {
+  provider: 'ollama' | 'anthropic' | 'openai'
+  ollama?:    { baseUrl: string; model: string }
+  anthropic?: { apiKey: string; model: string }
+  openai?:    { apiKey: string; model: string }
 }

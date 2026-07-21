@@ -3,7 +3,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import { intro, outro, text, confirm, isCancel, spinner } from '@clack/prompts'
 import { ProjectRegistry, scanProject } from '@curaye/core'
-import { loadProviderConfig } from '@curaye/ai'
+import { readAiConfig, isAvailable } from '@curaye/ai'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
 import { resolveProject, today } from '../lib/context.js'
 import { openInEditor } from '../lib/editor.js'
@@ -15,22 +15,24 @@ export function registerAi(program: Command): void {
     .command('status')
     .description('Report which AI provider is configured and whether it is reachable')
     .action(async () => {
-      const config = await loadProviderConfig()
-      if (!config) {
+      const config = await readAiConfig()
+      if (!config || !isAvailable(config)) {
         if (isJsonMode()) {
           printJson({ configured: false })
         } else {
           printLine('No AI provider configured.')
-          printLine('Create ~/.curaye/ai.yaml with provider, model, and api_key fields.')
+          printLine('Create ~/.curaye/config.yaml with an ai: section.')
         }
         return
       }
 
+      const providerConf = config[config.provider]
+      const model = (providerConf as { model?: string } | undefined)?.model ?? '(default)'
       if (isJsonMode()) {
-        printJson({ configured: true, provider: config.provider, model: config.model ?? null })
+        printJson({ configured: true, provider: config.provider, model })
       } else {
         printLine(`Provider: ${config.provider}`)
-        printLine(`Model:    ${config.model ?? '(default)'}`)
+        printLine(`Model:    ${model}`)
         printLine('Status:   configured (connectivity not verified in this release)')
       }
     })
@@ -42,7 +44,7 @@ export function registerAi(program: Command): void {
     .action(async (title: string, opts: { project?: string }) => {
       if (!isJsonMode()) intro('curaye ai draft')
 
-      const config = await loadProviderConfig()
+      const config = await readAiConfig()
       if (!config) die('No AI provider configured. Run `curaye ai status` to check.')
 
       const project = await resolveProject(opts.project)
@@ -131,7 +133,7 @@ Describe the outcome in 1–3 sentences.
     .action(async (opts: { project?: string }) => {
       if (!isJsonMode()) intro('curaye ai brief')
 
-      const config = await loadProviderConfig()
+      const config = await readAiConfig()
       if (!config) die('No AI provider configured. Run `curaye ai status` to check.')
 
       const project = await resolveProject(opts.project)
@@ -183,7 +185,7 @@ ${index.decisions.map((d) => `- ${d.id}: ${(d.frontmatter as { title?: string })
     .action(async (specId: string, opts: { project?: string }) => {
       if (!isJsonMode()) intro('curaye ai update-current')
 
-      const config = await loadProviderConfig()
+      const config = await readAiConfig()
       if (!config) die('No AI provider configured. Run `curaye ai status` to check.')
 
       const project = await resolveProject(opts.project)
