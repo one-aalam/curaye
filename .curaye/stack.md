@@ -8,7 +8,7 @@ updated: 2026-07-21
 
 - **Workspace:** pnpm 9+ with pnpm workspaces
 - **Build orchestration:** Turborepo 2.x
-- **Language:** TypeScript 5.x across all packages and apps
+- **Language:** TypeScript 7.x across all packages and apps
 
 ## apps/cli
 

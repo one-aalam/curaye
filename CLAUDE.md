@@ -73,7 +73,7 @@ When implementing `@curaye/protocol` or `@curaye/core`, this spec is the source 
 
 ### TypeScript
 
-All packages use strict TypeScript with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`. No `any`. No type assertions (`as`) except when interfacing with untyped third-party APIs, and only at the boundary — not propagated inward.
+All packages use TypeScript 7.x with strict mode, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`. No `any`. No type assertions (`as`) except when interfacing with untyped third-party APIs, and only at the boundary — not propagated inward.
 
 Types are derived from Zod schemas, not written by hand. If a type and a schema diverge, fix the schema and re-derive.
 
