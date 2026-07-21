@@ -43,22 +43,147 @@ Curaye is the first project to use itself.
 
 ## Claude Code skills
 
-Curaye ships six Claude Code skills that handle the intelligent, reasoning-heavy parts of the workflow. The CLI handles mechanical operations; the skills call the CLI and add LLM comprehension on top.
+Curaye ships six Claude Code skills that handle the intelligent, reasoning-heavy parts of the workflow. The CLI handles mechanical operations; the skills call the CLI and add LLM comprehension on top. Skills are not a UI for the CLI — they do what the CLI cannot: reasoning, comprehension, and conversation.
 
-| Skill | What it does |
-|---|---|
-| `/curaye-build` | Pick a spec, brief the agent, implement to acceptance criteria |
-| `/curaye-ship` | Graduate a spec: CLI does file ops, skill writes `current/` |
-| `/curaye-brief` | Re-entry brief synthesised from `.curaye/` |
-| `/curaye-bootstrap` | New project interview + scaffold + seed from shared layer |
-| `/curaye-import` | Brownfield import with LLM-enhanced `current/` docs |
-| `/curaye-check` | Drift detection with interpretation and interactive resolution |
+### Install (one-time per machine)
 
-**Install skills** (one-time per machine, after installing the CLI):
+After installing the CLI, copy all skills to your global Claude Code commands directory:
 
 ```bash
 curaye skill install
 ```
+
+Skills are then available as slash commands in every Claude Code session on that machine. To update skills after a CLI upgrade:
+
+```bash
+curaye skill install --update
+```
+
+To check what's installed and whether anything is out of date:
+
+```bash
+curaye skill install --list
+```
+
+### The six skills
+
+#### `/curaye-bootstrap`
+
+**When:** Starting a new project from scratch.
+
+Conducts a short conversational interview (name, domain, stack, first milestone, sync repo), then calls `curaye init` for the mechanical scaffold and drafts `prd.md`, `stack.md`, `product.md`, and a first planned spec — all tailored from your answers. Copies relevant decisions from the shared layer.
+
+```
+/curaye-bootstrap
+```
+
+No arguments. The skill asks everything it needs.
+
+---
+
+#### `/curaye-import`
+
+**When:** An existing project was never tracked under Curaye.
+
+Calls `curaye import <path>` to do the deterministic analysis (reading the file tree, package.json, git log), then enhances the generated `current/` docs with feature-level descriptions and surfaces 3–5 decision candidates inferred from code patterns. All generated docs are marked `confidence: inferred`.
+
+```
+/curaye-import path/to/project
+```
+
+Argument: path to the project root (optional — defaults to the current directory).
+
+---
+
+#### `/curaye-brief`
+
+**When:** Returning to a project after time away, or orienting before a work session.
+
+Reads `prd.md`, `stack.md`, all `current/`, `planned/`, `decisions/`, and the latest `shipped/` entries. Synthesises a six-section brief: Current State, What Was Planned, Where You Left Off, Decisions to Revisit, Suggested First Step, and Vision Check.
+
+```
+/curaye-brief
+```
+
+No arguments. Run it from a project directory with a `.curaye/` folder.
+
+---
+
+#### `/curaye-build`
+
+**When:** Implementing a planned spec.
+
+Reads the spec you name (or lets you pick one), loads `prd.md` and `CLAUDE.md` for context, marks the spec `building`, then implements it to its acceptance criteria. Reports on each criterion when done.
+
+```
+/curaye-build 03-package-core
+```
+
+Argument: spec id or filename (without path). Omit to be prompted to choose.
+
+---
+
+#### `/curaye-ship`
+
+**When:** A spec's implementation is complete and ready to graduate.
+
+Calls `curaye ship <id>` for the mechanical file operations (moves `planned/` → `shipped/`, writes frontmatter). Then reads the shipped spec and the implementation to write a `current/` doc — the living record of what exists — with genuine comprehension rather than a template fill.
+
+```
+/curaye-ship 03-package-core
+```
+
+Argument: spec id (same as the filename without the `.md`). Run after `/curaye-build` (or after manually completing the implementation).
+
+---
+
+#### `/curaye-check`
+
+**When:** Checking whether a project has drifted from its adopted shared-layer patterns.
+
+Calls `curaye check` for the deterministic comparison, then interprets each finding: intentional vs accidental vs uncertain. Walks through resolutions interactively — update to match, record an override decision, or snooze — and commits anything resolved.
+
+```
+/curaye-check
+/curaye-check my-project-id
+```
+
+Argument: project id (optional — defaults to the current directory).
+
+---
+
+### Typical workflows
+
+**New project:**
+```
+/curaye-bootstrap  →  /curaye-brief  →  /curaye-build <spec>  →  /curaye-ship <spec>
+```
+
+**Existing project, never tracked:**
+```
+/curaye-import  →  /curaye-brief  →  /curaye-build <spec>  →  /curaye-ship <spec>
+```
+
+**Returning after time away:**
+```
+/curaye-brief  →  /curaye-build <spec>  →  /curaye-ship <spec>
+```
+
+**Maintenance and drift:**
+```
+/curaye-check  →  /curaye-brief
+```
+
+### CLI vs skills
+
+Skills call the CLI for mechanical operations. The split is strict:
+
+| CLI handles | Skills handle |
+|---|---|
+| File moves, frontmatter writes, registry edits | Understanding what changed |
+| Git operations, index building, validation | Writing `current/` with comprehension |
+| Deterministic AI commands | Conversational interview flows |
+| Works in CI / any terminal | Drift interpretation and resolution |
 
 ## Getting started
 
@@ -71,9 +196,9 @@ curaye skill install
 
 # Bootstrap a new project
 cd your-project
-curaye bootstrap        # or: /curaye-bootstrap in Claude Code
+/curaye-bootstrap        # in a Claude Code session
 
-# Link an existing project
+# Or link an existing project
 curaye link .
 ```
 
