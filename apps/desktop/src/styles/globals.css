@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import "./glass.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-ui: system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  --background: #12100e;
+  --foreground: #f0e6d0;
+  --card: #1e1a16;
+  --card-foreground: #f0e6d0;
+  --primary: #f0a830;
+  --primary-foreground: #12100e;
+  --secondary: #1e1a16;
+  --secondary-foreground: #f0e6d0;
+  --muted: rgba(30, 26, 22, 0.9);
+  --muted-foreground: #9a8a70;
+  --accent: #1e1a16;
+  --accent-foreground: #f0e6d0;
+  --destructive: #c0392b;
+  --destructive-foreground: #ffffff;
+  --border: rgba(120, 100, 70, 0.4);
+  --input: rgba(120, 100, 70, 0.4);
+  --ring: #f0a830;
+  --radius: 0.625rem;
+  --sidebar: #0c0a08;
+  --sidebar-foreground: #c8b890;
+  --sidebar-primary: #f0a830;
+  --sidebar-primary-foreground: #0c0a08;
+  --sidebar-accent: rgba(255, 255, 255, 0.05);
+  --sidebar-accent-foreground: #c8b890;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #f0a830;
+}

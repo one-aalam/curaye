@@ -1,7 +1,7 @@
 ---
 id: desktop-app
 title: Desktop App — Foundation, Portfolio View & Spec Editor
-status: draft
+status: building
 effort: xl
 impact: high
 desire: high

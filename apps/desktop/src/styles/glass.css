@@ -1,0 +1,224 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   glass-ui — Token Layer
+   Copied from ilmgah/src/styles/glass.css
+══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --glass-bg:     rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-blur:   12px;
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  --glass-radius: var(--radius, 0.625rem);
+}
+
+[data-theme="saffron"] {
+  color-scheme: light;
+
+  --color-paper:       rgba(253, 248, 237, 0.92);
+  --color-ink:         #1c130a;
+  --color-surface:     #f5edd8;
+  --color-gold:        #d4850a;
+  --color-gold-light:  #f5c842;
+  --color-accent:      #e8520a;
+  --color-muted:       #9a7c52;
+  --color-smoke:       #7a6040;
+  --color-mist:        rgba(212, 192, 154, 0.55);
+  --color-fog:         rgba(245, 237, 216, 0.72);
+  --color-cream:       rgba(253, 248, 237, 0.95);
+  --color-slate:       #3d2b15;
+  --color-rust:        #8b3a2a;
+  --color-rust-light:  #f5e0dc;
+  --color-teal:        #1a5c5c;
+  --color-teal-light:  #d5edec;
+
+  --background:          var(--color-paper);
+  --foreground:          var(--color-ink);
+  --card:                var(--color-cream);
+  --card-foreground:     var(--color-ink);
+  --primary:             var(--color-gold);
+  --primary-foreground:  #ffffff;
+  --secondary:           var(--color-surface);
+  --secondary-foreground: var(--color-ink);
+  --muted:               var(--color-fog);
+  --muted-foreground:    var(--color-smoke);
+  --accent:              var(--color-surface);
+  --accent-foreground:   var(--color-ink);
+  --destructive:         var(--color-rust);
+  --destructive-foreground: #ffffff;
+  --border:              var(--color-mist);
+  --input:               var(--color-mist);
+  --ring:                var(--color-gold);
+  --radius:              0.625rem;
+
+  --sidebar:             #1c130a;
+  --sidebar-foreground:  #f5edd8;
+  --sidebar-primary:     #d4850a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent:      rgba(255, 255, 255, 0.06);
+  --sidebar-accent-foreground: #f5edd8;
+  --sidebar-border:      rgba(255, 255, 255, 0.08);
+  --sidebar-ring:        #d4850a;
+
+  --glass-bg:     rgba(255, 248, 235, 0.72);
+  --glass-border: rgba(180, 120, 40, 0.14);
+  --glass-shadow: 0 4px 24px rgba(120, 80, 20, 0.10);
+}
+
+[data-theme="raat"] {
+  color-scheme: dark;
+
+  --color-paper:       #12100e;
+  --color-ink:         #f0e6d0;
+  --color-surface:     #1e1a16;
+  --color-gold:        #f0a830;
+  --color-gold-light:  #f5c842;
+  --color-accent:      #e05c1a;
+  --color-muted:       #7a6a52;
+  --color-smoke:       #9a8a70;
+  --color-mist:        rgba(120, 100, 70, 0.4);
+  --color-fog:         rgba(30, 26, 22, 0.9);
+  --color-cream:       #1e1a16;
+  --color-slate:       #c8b890;
+  --color-rust:        #c0392b;
+  --color-rust-light:  rgba(192, 57, 43, 0.15);
+  --color-teal:        #1abc9c;
+  --color-teal-light:  rgba(26, 188, 156, 0.15);
+
+  --background:          var(--color-paper);
+  --foreground:          var(--color-ink);
+  --card:                var(--color-surface);
+  --card-foreground:     var(--color-ink);
+  --primary:             var(--color-gold);
+  --primary-foreground:  #12100e;
+  --secondary:           var(--color-surface);
+  --secondary-foreground: var(--color-ink);
+  --muted:               var(--color-fog);
+  --muted-foreground:    var(--color-smoke);
+  --accent:              var(--color-surface);
+  --accent-foreground:   var(--color-ink);
+  --destructive:         var(--color-rust);
+  --destructive-foreground: #ffffff;
+  --border:              var(--color-mist);
+  --input:               var(--color-mist);
+  --ring:                var(--color-gold);
+  --radius:              0.625rem;
+
+  --sidebar:             #0c0a08;
+  --sidebar-foreground:  #c8b890;
+  --sidebar-primary:     #f0a830;
+  --sidebar-primary-foreground: #0c0a08;
+  --sidebar-accent:      rgba(255, 255, 255, 0.05);
+  --sidebar-accent-foreground: #c8b890;
+  --sidebar-border:      rgba(255, 255, 255, 0.06);
+  --sidebar-ring:        #f0a830;
+
+  --glass-bg:     rgba(20, 14, 10, 0.55);
+  --glass-border: rgba(255, 210, 140, 0.10);
+  --glass-shadow: 0 4px 32px rgba(0, 0, 0, 0.40);
+}
+
+[data-theme="neel"] {
+  color-scheme: dark;
+
+  --color-paper:       #0d1520;
+  --color-ink:         #e0f0ff;
+  --color-surface:     #131e2e;
+  --color-gold:        #00c8c8;
+  --color-gold-light:  #80e8e8;
+  --color-accent:      #4080ff;
+  --color-muted:       #506080;
+  --color-smoke:       #7090b0;
+  --color-mist:        rgba(64, 100, 160, 0.35);
+  --color-fog:         rgba(19, 30, 46, 0.9);
+  --color-cream:       #131e2e;
+  --color-slate:       #a0c8e8;
+  --color-rust:        #ff5252;
+  --color-rust-light:  rgba(255, 82, 82, 0.12);
+  --color-teal:        #00e5b0;
+  --color-teal-light:  rgba(0, 229, 176, 0.12);
+
+  --background:          var(--color-paper);
+  --foreground:          var(--color-ink);
+  --card:                var(--color-surface);
+  --card-foreground:     var(--color-ink);
+  --primary:             var(--color-gold);
+  --primary-foreground:  #0d1520;
+  --secondary:           var(--color-surface);
+  --secondary-foreground: var(--color-ink);
+  --muted:               var(--color-fog);
+  --muted-foreground:    var(--color-smoke);
+  --accent:              var(--color-surface);
+  --accent-foreground:   var(--color-ink);
+  --destructive:         var(--color-rust);
+  --destructive-foreground: #ffffff;
+  --border:              var(--color-mist);
+  --input:               var(--color-mist);
+  --ring:                var(--color-gold);
+  --radius:              0.625rem;
+
+  --sidebar:             #090f18;
+  --sidebar-foreground:  #a0c8e8;
+  --sidebar-primary:     #00c8c8;
+  --sidebar-primary-foreground: #090f18;
+  --sidebar-accent:      rgba(255, 255, 255, 0.05);
+  --sidebar-accent-foreground: #a0c8e8;
+  --sidebar-border:      rgba(255, 255, 255, 0.06);
+  --sidebar-ring:        #00c8c8;
+
+  --glass-bg:     rgba(10, 14, 28, 0.60);
+  --glass-border: rgba(120, 160, 255, 0.12);
+  --glass-shadow: 0 4px 32px rgba(0, 0, 0, 0.44);
+}
+
+[data-theme="chaadar"] {
+  color-scheme: light;
+
+  --color-paper:       #ffffff;
+  --color-ink:         #111111;
+  --color-surface:     #f4f4f5;
+  --color-gold:        #7c4dff;
+  --color-gold-light:  #b39dff;
+  --color-accent:      #ff4081;
+  --color-muted:       #71717a;
+  --color-smoke:       #52525b;
+  --color-mist:        rgba(0, 0, 0, 0.08);
+  --color-fog:         rgba(244, 244, 245, 0.9);
+  --color-cream:       #fafafa;
+  --color-slate:       #27272a;
+  --color-rust:        #ef4444;
+  --color-rust-light:  #fee2e2;
+  --color-teal:        #10b981;
+  --color-teal-light:  #d1fae5;
+
+  --background:          var(--color-paper);
+  --foreground:          var(--color-ink);
+  --card:                var(--color-cream);
+  --card-foreground:     var(--color-ink);
+  --primary:             var(--color-gold);
+  --primary-foreground:  #ffffff;
+  --secondary:           var(--color-surface);
+  --secondary-foreground: var(--color-ink);
+  --muted:               var(--color-fog);
+  --muted-foreground:    var(--color-smoke);
+  --accent:              var(--color-surface);
+  --accent-foreground:   var(--color-ink);
+  --destructive:         var(--color-rust);
+  --destructive-foreground: #ffffff;
+  --border:              var(--color-mist);
+  --input:               var(--color-mist);
+  --ring:                var(--color-gold);
+  --radius:              0.625rem;
+
+  --sidebar:             #18181b;
+  --sidebar-foreground:  #f4f4f5;
+  --sidebar-primary:     #7c4dff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent:      rgba(255, 255, 255, 0.06);
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border:      rgba(255, 255, 255, 0.08);
+  --sidebar-ring:        #7c4dff;
+
+  --glass-bg:     rgba(255, 255, 255, 0.70);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
+}

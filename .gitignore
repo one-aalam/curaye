@@ -5,6 +5,14 @@ out/
 .turbo/
 *.tsbuildinfo
 
+# macOS
+.DS_Store
+
+# Tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/WixTools/
+apps/desktop/src-tauri/gen/
+
 # Curaye — this project uses its own convention
 # .curaye/ is intentionally NOT gitignored here because
 # Curaye's own specs are part of its public source of truth.
