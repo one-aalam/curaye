@@ -1,7 +1,7 @@
 ---
 id: cli
 title: CLI — Command Surface
-status: draft
+status: building
 effort: l
 impact: high
 desire: high

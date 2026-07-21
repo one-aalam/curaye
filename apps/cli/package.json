@@ -13,12 +13,15 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@clack/prompts": "^1.7.0",
     "@curaye/ai": "workspace:*",
     "@curaye/core": "workspace:*",
+    "@curaye/protocol": "workspace:*",
     "@curaye/sync": "workspace:*",
     "commander": "^12.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^7.0.2"
   }
 }
