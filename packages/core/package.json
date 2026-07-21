@@ -18,9 +18,12 @@
   },
   "dependencies": {
     "@curaye/protocol": "workspace:*",
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^5.2.1"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.1.1",
     "typescript": "^7.0.2"
   }
 }

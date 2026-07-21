@@ -1,7 +1,7 @@
 ---
 id: package-core
 title: "@curaye/core — Project Scanner & Registry"
-status: ready
+status: building
 effort: m
 impact: high
 desire: high

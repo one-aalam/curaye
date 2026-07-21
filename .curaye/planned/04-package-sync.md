@@ -1,7 +1,7 @@
 ---
 id: package-sync
 title: "@curaye/sync — Git Sync Layer"
-status: ready
+status: building
 effort: s
 impact: high
 desire: high
