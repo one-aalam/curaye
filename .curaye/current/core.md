@@ -57,6 +57,7 @@ class ProjectRegistry {
   static async remove(id: string): Promise<void>        // no-op for unknown id
   static async update(id: string, patch: Partial<RegistryProject>): Promise<void>
   static async find(id: string): Promise<RegistryProject | null>
+  static async adopt(projectId: string, sharedDocId: string): Promise<void>  // idempotent
   static curiyePath(project: RegistryProject): string   // project.path + '/.curaye'
 }
 
@@ -67,8 +68,43 @@ interface RegistryProject {
   gh?:          string
   sync_remote?: string
   added:        string          // ISO date
+  adopts?:      string[]        // shared layer doc refs, e.g. 'shared/decisions/why-sqlite'
 }
 ```
+
+## `SharedLayer`
+
+Manages `~/.curaye/shared/` — the cross-project knowledge store. All five category subfolders (`decisions/`, `patterns/`, `design/`, `agents/`, `stack/`) are created by `init()`.
+
+```ts
+class SharedLayer {
+  static async init(): Promise<void>
+  static async list(category?: SharedCategory): Promise<SharedDocument[]>
+  static async show(id: string): Promise<SharedDocument | null>
+  static async recordReview(docId: string, projectId: string): Promise<void>
+  static async diff(docId: string, projectId: string): Promise<string | null>
+  static async notifyUpdate(docId: string, category: SharedCategory, adoptedBy: string[]): Promise<void>
+  static async listNotifications(): Promise<SharedNotification[]>
+  static async markReviewed(docId: string, projectId: string): Promise<void>
+}
+
+interface SharedDocument {
+  id:       string
+  category: SharedCategory   // 'decisions' | 'patterns' | 'design' | 'agents' | 'stack'
+  filePath: string
+  title:    string
+  raw:      string
+}
+
+interface SharedNotification {
+  docId:     string
+  category:  SharedCategory
+  adoptedBy: string[]
+  updatedAt: string
+}
+```
+
+Review snapshots (diff baselines) are stored in `~/.curaye/shared-reviews/<projectId>/<docId>.md`. Notifications are stored in `~/.curaye/notifications.yaml`.
 
 ## Error types
 
@@ -76,4 +112,5 @@ interface RegistryProject {
 class CurayeNotFoundError extends Error {}   // .curaye/ not found
 class RegistryError extends Error {}          // registry read/write failure
 class DocumentWriteError extends Error {}     // atomic write failure
+class SharedLayerError extends Error {}       // shared layer read/write failure
 ```

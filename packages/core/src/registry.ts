@@ -11,6 +11,7 @@ export interface RegistryProject {
   gh?: string
   sync_remote?: string
   added: string
+  adopts?: string[]
 }
 
 interface RegistryFile {
@@ -87,5 +88,17 @@ export class ProjectRegistry {
 
   static curiyePath(project: RegistryProject): string {
     return path.join(project.path, '.curaye')
+  }
+
+  /** Declare adoption of a shared document for the given project. Idempotent. */
+  static async adopt(projectId: string, sharedDocId: string): Promise<void> {
+    const data = await readFile()
+    const idx = data.projects.findIndex((p) => p.id === projectId)
+    if (idx < 0) throw new RegistryError(`Project '${projectId}' not found in registry`)
+    const project = data.projects[idx]!
+    const current = project.adopts ?? []
+    if (current.includes(sharedDocId)) return
+    data.projects[idx] = { ...project, adopts: [...current, sharedDocId] }
+    await writeFile(data)
   }
 }

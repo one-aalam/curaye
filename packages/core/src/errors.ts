@@ -12,6 +12,13 @@ export class RegistryError extends Error {
   }
 }
 
+export class SharedLayerError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SharedLayerError'
+  }
+}
+
 export class DocumentWriteError extends Error {
   constructor(path: string, cause: unknown) {
     super(`Failed to write document at: ${path}`)

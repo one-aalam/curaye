@@ -61,6 +61,17 @@ All AI commands require a configured provider.
 | `curaye ai brief [--project <id>]` | Streams a re-entry brief from `prd.md`, `stack.md`, `current/`, `planned/`, and `decisions/`. |
 | `curaye ai update-current <spec-id> [--project <id>]` | Generates a `current/` update proposal from a shipped spec and opens in `$EDITOR`. |
 
+## Shared layer
+
+| Command | Description |
+|---|---|
+| `curaye shared init` | Creates `~/.curaye/shared/` with all five category subfolders. Idempotent. |
+| `curaye shared list [--category <cat>]` | Lists all shared documents grouped by category. `--category` filters to one of: `decisions`, `patterns`, `design`, `agents`, `stack`. |
+| `curaye shared show <id>` | Prints a shared document to stdout. |
+| `curaye shared adopt <id> [--project <id>]` | Declares adoption of a shared document for the given project; records the current state as the diff baseline; infers project from cwd when `--project` is omitted. |
+| `curaye shared diff <id> [--project <id>]` | Shows what changed in a shared document since the project last reviewed it (LCS line diff). Errors if no baseline exists — run `adopt` first. |
+| `curaye shared notifications [--mark-reviewed <docId> --project <id>]` | Lists pending update notifications. `--mark-reviewed` clears the notification for the given doc/project pair and updates the review snapshot. |
+
 ## Bootstrap and import
 
 | Command | Description |

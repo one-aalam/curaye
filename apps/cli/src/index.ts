@@ -14,6 +14,7 @@ import { registerSearch } from './commands/search.js'
 import { registerAi } from './commands/ai.js'
 import { registerBootstrap } from './commands/bootstrap.js'
 import { registerPromote } from './commands/promote.js'
+import { registerShared } from './commands/shared.js'
 
 const program = new Command()
 
@@ -40,6 +41,7 @@ registerSearch(program)
 registerAi(program)
 registerBootstrap(program)
 registerPromote(program)
+registerShared(program)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   process.stderr.write((err instanceof Error ? err.message : String(err)) + '\n')

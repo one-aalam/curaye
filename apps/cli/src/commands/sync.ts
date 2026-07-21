@@ -7,11 +7,14 @@ import {
   push,
   pull,
   pullAll,
+  pushShared,
+  pullShared,
   status as syncStatus,
   initSyncRepo,
   syncRegistry,
 } from '@curaye/sync'
 import type { SyncConfig } from '@curaye/sync'
+import { SHARED_DIR } from '@curaye/core'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
 import { resolveProject } from '../lib/context.js'
 
@@ -73,8 +76,22 @@ export function registerSync(program: Command): void {
 
           await syncRegistry(projects, config)
 
+          // Sync shared layer alongside project content
+          const ss = spinner()
+          if (!isJsonMode()) ss.start('Syncing shared layer…')
+          try {
+            if (doPull) {
+              await pullShared(SHARED_DIR, config)
+            } else {
+              await pushShared(SHARED_DIR, config)
+            }
+            if (!isJsonMode()) ss.stop('Shared layer synced')
+          } catch {
+            if (!isJsonMode()) ss.stop('Shared layer sync skipped (no content)')
+          }
+
           if (isJsonMode()) {
-            printJson({ synced: projects.map((p) => p.id) })
+            printJson({ synced: projects.map((p) => p.id), sharedSynced: true })
           } else {
             outro('All projects synced.')
           }
@@ -102,8 +119,19 @@ export function registerSync(program: Command): void {
         const projects = await ProjectRegistry.read()
         await syncRegistry(projects, config)
 
+        // Sync shared layer alongside project content
+        try {
+          if (doPull) {
+            await pullShared(SHARED_DIR, config)
+          } else {
+            await pushShared(SHARED_DIR, config)
+          }
+        } catch {
+          // No shared content yet — not an error
+        }
+
         if (isJsonMode()) {
-          printJson({ synced: project.id })
+          printJson({ synced: project.id, sharedSynced: true })
         } else {
           outro(`Pushed ${project.id}`)
         }

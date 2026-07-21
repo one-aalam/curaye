@@ -3,6 +3,8 @@ import path from 'path'
 import { dump as yamlDump } from 'js-yaml'
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git'
 import type { RegistryProject } from '@curaye/core'
+import { ProjectRegistry, SharedLayer } from '@curaye/core'
+import type { SharedCategory } from '@curaye/core'
 import { SyncConflictError, SyncAuthError, SyncNetworkError, SyncError } from './errors.js'
 
 export interface SyncConfig {
@@ -184,6 +186,130 @@ export async function status(config: SyncConfig): Promise<SyncStatus> {
   } catch {
     return { state: 'no-remote' }
   }
+}
+
+const SHARED_SYNC_DIR = 'shared'
+
+/**
+ * Push ~/.curaye/shared/ to the sync repo as shared/ alongside project folders.
+ * Only commits if content actually changed.
+ */
+export async function pushShared(sharedLocalDir: string, config: SyncConfig): Promise<void> {
+  const g = git(config.localRepo)
+  try {
+    const destDir = path.join(config.localRepo, SHARED_SYNC_DIR)
+    await removeDir(destDir)
+    // Copy only if the local shared dir exists
+    try {
+      await fs.access(sharedLocalDir)
+      await copyDir(sharedLocalDir, destDir)
+    } catch {
+      // No local shared dir — nothing to push
+      return
+    }
+
+    const statusResult: StatusResult = await g.status()
+    if (statusResult.isClean()) return
+
+    await g.add('.')
+    const dateStr = new Date().toISOString().slice(0, 10)
+    await g.commit(`sync: shared layer ${dateStr}`)
+    await g.push()
+  } catch (err) {
+    if (err instanceof SyncError) throw err
+    classifyGitError(err)
+  }
+}
+
+/**
+ * Pull shared/ from the sync repo into ~/.curaye/shared/.
+ * Creates notifications for any shared docs that changed and have adopting projects.
+ */
+export async function pullShared(sharedLocalDir: string, config: SyncConfig): Promise<void> {
+  const g = git(config.localRepo)
+  try {
+    await g.fetch()
+    const statusResult: StatusResult = await g.status()
+    if (statusResult.conflicted.length > 0) throw new SyncConflictError(statusResult.conflicted)
+
+    const srcDir = path.join(config.localRepo, SHARED_SYNC_DIR)
+    // Snapshot existing content before pull (to detect changes)
+    const preSnap = await snapshotDir(srcDir)
+
+    await g.pull()
+
+    // Detect which shared docs changed
+    const postSnap = await snapshotDir(srcDir)
+    const changedIds = detectChangedDocs(preSnap, postSnap)
+
+    // Overwrite local shared dir
+    try {
+      await fs.access(srcDir)
+      await removeDir(sharedLocalDir)
+      await copyDir(srcDir, sharedLocalDir)
+    } catch {
+      // No shared/ in sync repo yet — nothing to pull
+      return
+    }
+
+    // Fire notifications for changed docs that have adopters
+    if (changedIds.length > 0) {
+      const registry = await ProjectRegistry.read()
+      for (const { id, category } of changedIds) {
+        const adopters = registry
+          .filter((p) => p.adopts?.some((a) => a.endsWith(`/${id}`) || a === id))
+          .map((p) => p.id)
+        await SharedLayer.notifyUpdate(id, category as SharedCategory, adopters)
+      }
+    }
+  } catch (err) {
+    if (err instanceof SyncError) throw err
+    classifyGitError(err)
+  }
+}
+
+async function snapshotDir(dir: string): Promise<Map<string, string>> {
+  const snap = new Map<string, string>()
+  try {
+    await walkDir(dir, dir, snap)
+  } catch {
+    // dir doesn't exist
+  }
+  return snap
+}
+
+async function walkDir(base: string, current: string, snap: Map<string, string>): Promise<void> {
+  const entries = await fs.readdir(current, { withFileTypes: true })
+  for (const entry of entries) {
+    const full = path.join(current, entry.name)
+    if (entry.isDirectory()) {
+      await walkDir(base, full, snap)
+    } else {
+      const rel = path.relative(base, full)
+      const content = await fs.readFile(full, 'utf8').catch(() => '')
+      snap.set(rel, content)
+    }
+  }
+}
+
+function detectChangedDocs(
+  pre: Map<string, string>,
+  post: Map<string, string>,
+): Array<{ id: string; category: string }> {
+  const changed: Array<{ id: string; category: string }> = []
+  for (const [rel, content] of post) {
+    if (!rel.endsWith('.md')) continue
+    if (pre.get(rel) !== content) {
+      const parts = rel.split(path.sep)
+      if (parts.length === 2) {
+        const [category, filename] = parts
+        if (category && filename) {
+          changed.push({ id: filename.replace(/\.md$/, ''), category })
+        }
+      }
+    }
+  }
+  return changed
 }
 
 export async function syncRegistry(registry: RegistryProject[], config: SyncConfig): Promise<void> {

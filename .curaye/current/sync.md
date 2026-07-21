@@ -16,6 +16,12 @@ updated: 2026-07-21
 ```
 curaye-sync/               ← private GitHub repo
   projects.yaml            ← registry metadata (no local paths)
+  shared/                  ← mirrors ~/.curaye/shared/ (cross-project knowledge)
+    decisions/
+    patterns/
+    design/
+    agents/
+    stack/
   curaye/                  ← mirrors curaye/.curaye/
     planned/
     current/
@@ -64,9 +70,21 @@ async function status(config: SyncConfig): Promise<SyncStatus>
 Returns sync state of the local repo vs its remote.
 
 ```ts
+async function pushShared(sharedLocalDir: string, config: SyncConfig): Promise<void>
+```
+Copies `~/.curaye/shared/` into `shared/` in the sync repo and pushes. No-op when nothing has changed.
+
+```ts
+async function pullShared(sharedLocalDir: string, config: SyncConfig): Promise<void>
+```
+Pulls the sync repo, copies `shared/` back to `~/.curaye/shared/`. Detects which shared documents changed and calls `SharedLayer.notifyUpdate()` for any that have adopting projects.
+
+```ts
 async function syncRegistry(registry: RegistryProject[], config: SyncConfig): Promise<void>
 ```
 Writes `projects.yaml` (without `path` fields) to the sync repo and pushes.
+
+`curaye sync` and `curaye sync --pull` call `pushShared`/`pullShared` automatically after syncing project content. Missing shared content is silently skipped (not an error).
 
 ## `SyncStatus`
 
