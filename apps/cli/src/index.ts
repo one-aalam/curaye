@@ -15,6 +15,8 @@ import { registerAi } from './commands/ai.js'
 import { registerBootstrap } from './commands/bootstrap.js'
 import { registerPromote } from './commands/promote.js'
 import { registerShared } from './commands/shared.js'
+import { registerImport } from './commands/import.js'
+import { registerReview } from './commands/review.js'
 
 const program = new Command()
 
@@ -42,6 +44,8 @@ registerAi(program)
 registerBootstrap(program)
 registerPromote(program)
 registerShared(program)
+registerImport(program)
+registerReview(program)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   process.stderr.write((err instanceof Error ? err.message : String(err)) + '\n')

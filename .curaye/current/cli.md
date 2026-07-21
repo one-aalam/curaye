@@ -77,6 +77,8 @@ All AI commands require a configured provider.
 | Command | Description |
 |---|---|
 | `curaye bootstrap [path]` | Runs the project bootstrap interview and scaffolds `.curaye/`. Asks 5 questions (description, target user, app type, shared decisions, first feature), drafts `prd.md` and first planned spec via AI if configured, seeds `stack.md` from shared layer, copies selected shared decisions with `source` field, and auto-registers the project. Errors cleanly if `.curaye/` already exists. |
+| `curaye import [path] [--deterministic-only] [--skip-interview]` | Analyses an existing project without `.curaye/` and generates one at ~60% fidelity. Detects project type from `package.json`, `Cargo.toml`, or `pyproject.toml`; infers `stack.md`, `prd.md`, `current/` domain stubs, and `shipped/` entries from git tags. With AI configured, enhances `current/` docs with feature-level descriptions and infers `decisions/` candidates. Runs a 5-question targeted interview by default. All generated documents carry `confidence: inferred` in frontmatter. Auto-registers the project. |
+| `curaye review [path]` | Lists all documents with `confidence: inferred`, opens each in `$EDITOR`, and removes the `confidence` field when the user marks it reviewed — converting it to a standard protocol document. Supports `--json` to list inferred docs without interactive review. |
 | `curaye promote <file> --to <shared\|decisions\|patterns\|design>` | Promotes a document to the shared layer (spec `17-pattern-promotion`). |
 
 ## Binary distribution
