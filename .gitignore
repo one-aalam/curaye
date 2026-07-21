@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Curaye — this project uses its own convention
+# .curaye/ is intentionally NOT gitignored here because
+# Curaye's own specs are part of its public source of truth.
+# For all other projects managed by Curaye, .curaye/ is gitignored.
