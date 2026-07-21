@@ -19,7 +19,13 @@ Most developers work across several projects simultaneously. Context for each pr
 - Gives each project a structured `.curaye/` folder: current state, planned work, shipped history, and recorded decisions.
 - Maintains a shared layer above projects: patterns, design systems, standing decisions, and agent steering documents that belong to the developer, not to any one codebase.
 - Syncs everything to a private GitHub repository for cross-machine continuity.
-- Provides AI augmentation for drafting specs, maintaining the current/ layer, generating re-entry briefs, and detecting patterns across projects.
+- Provides AI augmentation through two complementary channels: a CLI for deterministic operations and scriptable AI commands, and Claude Code skills for intelligent, reasoning-heavy workflows (implementing specs, writing current/ updates, brownfield import, drift resolution).
+
+## The two AI channels
+
+**CLI (`curaye ai *`)** — deterministic, scriptable, CI-friendly. Calls an AI provider for generation but treats the output as a file operation. Works in any terminal.
+
+**Claude Code skills (`/curaye-*`)** — context-aware, conversational, intelligent. The skills call the CLI for mechanical operations and use LLM reasoning for what the CLI cannot do: understanding what changed, writing meaningful `current/` updates, conducting interviews, interpreting drift findings. Installed once via `curaye skill install`, available in every Claude Code session.
 
 ## What it is not
 
