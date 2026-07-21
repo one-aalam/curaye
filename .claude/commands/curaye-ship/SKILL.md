@@ -1,6 +1,6 @@
 ---
 name: curaye-ship
-description: Graduate a completed Curaye spec from planned/ to shipped/ and update the current/ layer. Use after /curaye-build when the implementation is done. The CLI handles mechanical file operations; this skill writes the current/ update with LLM comprehension. Pass the spec id as an argument.
+description: Graduate a completed Curaye spec from planned/ to shipped/, update the current/ layer, and optionally sync stack.md and CLAUDE.md. Use after /curaye-build when the implementation is done. The CLI handles mechanical file operations; this skill writes the current/ update with LLM comprehension, then proposes targeted edits to stack.md and CLAUDE.md when what shipped affects the tech stack or agent conventions. Pass the spec id as an argument.
 compatibility: Designed for Claude Code. Requires a Curaye-managed project and the curaye CLI installed.
 metadata:
   version: "0.1"
@@ -90,16 +90,57 @@ updated: <today YYYY-MM-DD>
 
 Do not leave `current/` unchanged unless the spec was a pure internal refactor with zero observable behaviour change — and even then, note this explicitly.
 
-## Step 5 — Commit
+## Step 5 — Sync stack.md and CLAUDE.md (optional, user-confirmed)
+
+Reason about whether what just shipped has implications for the two meta-documents. These are not updated on every ship — only when something structurally changed.
+
+**`stack.md` is affected when the spec introduced:**
+- A new package or app in the monorepo
+- A new runtime dependency (library, tool, runtime version)
+- A removed or replaced dependency
+- A new version pin or constraint
+
+**`CLAUDE.md` is affected when the spec established:**
+- A new package boundary rule or dependency constraint
+- A new error-handling pattern or convention
+- A new commit scope or type
+- A new "what not to build" invariant
+- A new per-package convention agents must follow
+
+**If neither document is affected**, skip this step silently — do not mention it to the user.
+
+**If one or both are affected**, present your proposed changes before writing anything:
+
+```
+stack.md needs updating:
+  + js-yaml ^4.3.0 added as a runtime dependency of @curaye/core
+  + @types/js-yaml added as a dev dependency
+
+CLAUDE.md needs updating:
+  + Note that js-yaml must be imported as named exports ({ load, dump }),
+    not a default import, due to its CJS export shape
+
+Apply these changes? [y/n/edit]
+  y     — write both files as proposed
+  n     — skip, no changes
+  edit  — show me the diff first, I'll tell you what to adjust
+```
+
+Wait for the user's response before writing. If they say `edit`, show the exact lines you intend to add or change and wait for approval.
+
+When approved, write the changes. Update the `updated` frontmatter field in `stack.md` if it has one.
+
+## Step 6 — Commit
 
 Stage only `.curaye/` changes. Derive the commit scope from the spec's first tag that maps to a CLAUDE.md scope (`cli`, `desktop`, `web`, `core`, `protocol`, `ai`, `sync`, `ui`, `shared`). Fall back to `spec`.
 
 ```bash
-git add .curaye/
+git add .curaye/ stack.md CLAUDE.md
 git commit -m "$(cat <<'HEREDOC'
 feat(<scope>): ship <spec-title>
 
 Graduated planned/<id> → shipped/<id>. Updated current/<domains>.
+<If stack.md or CLAUDE.md were updated, add a line: Updated stack.md / CLAUDE.md.>
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 HEREDOC
