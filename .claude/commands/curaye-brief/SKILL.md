@@ -1,3 +1,11 @@
+---
+name: curaye-brief
+description: Generate a structured re-entry brief for a Curaye-managed project. Use when returning to a project after time away or before starting a work session. Reads prd.md, stack.md, current/, planned/, decisions/, and recent shipped/ entries, then synthesises a six-section brief covering current state, planned work, where you left off, decisions to revisit, a suggested first step, and a vision check.
+compatibility: Designed for Claude Code. Requires a Curaye-managed project with a .curaye/ folder.
+metadata:
+  version: "0.1"
+---
+
 Generate a structured re-entry brief for a Curaye-managed project. The brief answers: what exists, where you left off, what's next, and what needs revisiting.
 
 Project (optional): $ARGUMENTS

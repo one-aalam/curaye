@@ -1,3 +1,11 @@
+---
+name: curaye-bootstrap
+description: Bootstrap a new project with a .curaye/ folder. Use when starting a project that has never been tracked under Curaye. Conducts a five-question conversational interview, calls the CLI to create the scaffold, drafts prd.md, stack.md, product.md, and a first planned spec, then seeds relevant decisions from the shared layer. Optionally pass the project path as an argument.
+compatibility: Designed for Claude Code. Requires the curaye CLI installed.
+metadata:
+  version: "0.1"
+---
+
 Bootstrap a new or blank project with a `.curaye/` folder. Conducts a conversational interview, seeds from the shared layer, and produces a complete initial scaffold.
 
 Project path (optional): $ARGUMENTS

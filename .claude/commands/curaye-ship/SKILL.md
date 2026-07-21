@@ -1,3 +1,11 @@
+---
+name: curaye-ship
+description: Graduate a completed Curaye spec from planned/ to shipped/ and update the current/ layer. Use after /curaye-build when the implementation is done. The CLI handles mechanical file operations; this skill writes the current/ update with LLM comprehension. Pass the spec id as an argument.
+compatibility: Designed for Claude Code. Requires a Curaye-managed project and the curaye CLI installed.
+metadata:
+  version: "0.1"
+---
+
 You are graduating a completed spec through the Curaye protocol ship flow. The CLI handles all mechanical file operations. Your job is the intelligent part: writing the `current/` update that reflects what now exists.
 
 The spec to ship: $ARGUMENTS
@@ -88,13 +96,13 @@ Stage only `.curaye/` changes. Derive the commit scope from the spec's first tag
 
 ```bash
 git add .curaye/
-git commit -m "$(cat <<'EOF'
+git commit -m "$(cat <<'HEREDOC'
 feat(<scope>): ship <spec-title>
 
 Graduated planned/<id> → shipped/<id>. Updated current/<domains>.
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-EOF
+HEREDOC
 )"
 ```
 

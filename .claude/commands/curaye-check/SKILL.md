@@ -1,3 +1,11 @@
+---
+name: curaye-check
+description: Detect and resolve drift between a project and its adopted shared-layer documents. Use when you suspect a project has diverged from shared patterns or when shared documents have been updated. Calls the CLI for deterministic comparison, interprets each finding with LLM judgment, and walks through resolutions interactively. Optionally pass a project id as an argument.
+compatibility: Designed for Claude Code. Requires a Curaye-managed project and the curaye CLI installed.
+metadata:
+  version: "0.1"
+---
+
 Detect drift between this project's local decisions and the shared layer it has adopted. Surfaces findings, interprets them, and walks through resolutions interactively.
 
 Project (optional): $ARGUMENTS
@@ -115,11 +123,11 @@ If any files were changed:
 
 ```bash
 git add .curaye/
-git commit -m "$(cat <<'EOF'
+git commit -m "$(cat <<'HEREDOC'
 chore(shared): resolve drift findings from shared layer check
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-EOF
+HEREDOC
 )"
 ```
 

@@ -1,3 +1,11 @@
+---
+name: curaye-build
+description: Implement a Curaye protocol spec to its acceptance criteria. Use when you want to build a planned feature in a Curaye-managed project. Reads the spec, marks it building, implements it, and verifies every acceptance criterion before reporting. Pass a spec id as an argument, or omit to be shown the list of available specs.
+compatibility: Designed for Claude Code. Requires a Curaye-managed project with a .curaye/planned/ folder.
+metadata:
+  version: "0.1"
+---
+
 You are about to implement a feature defined by a Curaye protocol spec. Follow every step in order without skipping.
 
 ## Step 1 — Identify the spec

@@ -1,3 +1,11 @@
+---
+name: curaye-import
+description: Import an existing project with no .curaye/ history into the Curaye system. Use when a project already has code but has never been tracked under Curaye. Runs deterministic inference via the CLI, then uses LLM comprehension to write meaningful current/ documents and surface decision candidates from code patterns. Optionally pass the project path as an argument.
+compatibility: Designed for Claude Code. Requires the curaye CLI installed.
+metadata:
+  version: "0.1"
+---
+
 Import an existing project that has no `.curaye/` history into the Curaye system. Runs deterministic inference via the CLI, then uses LLM comprehension to write meaningful `current/` documents and surface decision candidates.
 
 Project path (optional): $ARGUMENTS
