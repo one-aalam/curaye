@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useProjectStore, type RegistryProject } from "@/stores/projectStore";
 import { useTreeStore } from "@/stores/treeStore";
 import { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator } from "@/components/ui/menu";
+import { SettingsTrigger } from "@/components/SettingsDrawer";
 
 const STATUS_COLORS: Record<string, string> = {
   clean: "bg-green-500",
@@ -124,18 +125,19 @@ export function ProjectsSidebar() {
         ))}
       </div>
 
-      <div className="border-t border-sidebar-border p-1.5">
+      <div className="border-t border-sidebar-border p-1.5 flex items-center gap-1">
         <button
           type="button"
           onClick={() => void handleAddProject()}
           className={cn(
-            "flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs",
+            "flex flex-1 items-center gap-2 rounded px-2.5 py-1.5 text-xs",
             "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors",
           )}
         >
           <Plus size={12} />
           Add project
         </button>
+        <SettingsTrigger />
       </div>
     </aside>
   );

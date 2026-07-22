@@ -1,14 +1,14 @@
 ---
 id: desktop-ai-palette
 title: Desktop — AI Command Palette
-status: draft
+status: building
 effort: m
 impact: high
 desire: high
 requires: [desktop-app, package-ai]
 tags: [desktop, ai, ui]
 created: 2026-07-21
-updated: 2026-07-21
+updated: 2026-07-22
 ---
 
 # Desktop — AI Command Palette

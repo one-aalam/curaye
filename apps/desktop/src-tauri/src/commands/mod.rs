@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::command;
+use tauri::{command, Emitter};
 use tauri_plugin_dialog::DialogExt;
 
 // ── Registry types ────────────────────────────────────────────────────────────
@@ -215,12 +217,6 @@ fn parse_frontmatter_quick(content: &str) -> BTreeMap<String, serde_yaml::Value>
 }
 
 // ── Document read/write ───────────────────────────────────────────────────────
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FrontmatterFields {
-    #[serde(flatten)]
-    pub fields: BTreeMap<String, serde_json::Value>,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ValidationIssue {
@@ -462,6 +458,475 @@ fn chrono_today() -> String {
     let m = (d_in_y / 30) + 1;
     let d = (d_in_y % 30) + 1;
     format!("{:04}-{:02}-{:02}", y, m.min(12), d.min(31))
+}
+
+// ── AI config ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiProviderConfig {
+    pub kind: String,
+    pub api_key: Option<String>,
+    pub model: String,
+    pub base_url: Option<String>,
+}
+
+fn ai_config_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("config.yaml")
+}
+
+#[command]
+pub async fn get_ai_config() -> Result<Option<AiProviderConfig>, String> {
+    let path = ai_config_path();
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let parsed: serde_yaml::Value =
+        serde_yaml::from_str(&content).map_err(|e| e.to_string())?;
+
+    let ai = match parsed.get("ai") {
+        Some(v) => v.clone(),
+        None => return Ok(None),
+    };
+
+    let provider_str = match ai.get("provider").and_then(|v| v.as_str()) {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let cfg = match provider_str {
+        "anthropic" => {
+            let section = ai.get("anthropic");
+            let api_key = section
+                .and_then(|v| v.get("apiKey"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model = section
+                .and_then(|v| v.get("model"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("claude-sonnet-5")
+                .to_string();
+            AiProviderConfig { kind: "anthropic".into(), api_key, model, base_url: None }
+        }
+        "ollama" => {
+            let section = ai.get("ollama");
+            let base_url = section
+                .and_then(|v| v.get("baseUrl"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model = section
+                .and_then(|v| v.get("model"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("llama3")
+                .to_string();
+            AiProviderConfig { kind: "ollama".into(), api_key: None, model, base_url }
+        }
+        "openai" => {
+            let section = ai.get("openai");
+            let api_key = section
+                .and_then(|v| v.get("apiKey"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model = section
+                .and_then(|v| v.get("model"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("gpt-4o")
+                .to_string();
+            let base_url = section
+                .and_then(|v| v.get("baseUrl"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            AiProviderConfig { kind: "openai".into(), api_key, model, base_url }
+        }
+        _ => return Ok(None),
+    };
+
+    Ok(Some(cfg))
+}
+
+// ── AI streaming ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AiMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", content = "payload")]
+pub enum AiStreamEvent {
+    Token(String),
+    Done,
+    Error(String),
+}
+
+pub struct AiStreamState(pub Arc<Mutex<Option<tokio::task::AbortHandle>>>);
+
+#[command]
+pub async fn start_ai_stream(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AiStreamState>,
+    config: AiProviderConfig,
+    messages: Vec<AiMessage>,
+) -> Result<(), String> {
+    // Cancel any in-flight stream
+    if let Some(handle) = state.0.lock().unwrap().take() {
+        handle.abort();
+    }
+
+    let state_arc = Arc::clone(&state.0);
+    let join = tokio::task::spawn(async move {
+        let result = run_ai_stream(&app, &config, &messages).await;
+        let ev = match result {
+            Ok(()) => AiStreamEvent::Done,
+            Err(e) => AiStreamEvent::Error(e),
+        };
+        let _ = app.emit("ai-stream", ev);
+        if let Ok(mut g) = state_arc.lock() {
+            *g = None;
+        }
+    });
+
+    *state.0.lock().unwrap() = Some(join.abort_handle());
+    Ok(())
+}
+
+#[command]
+pub async fn cancel_ai_stream(state: tauri::State<'_, AiStreamState>) -> Result<(), String> {
+    if let Some(handle) = state.0.lock().unwrap().take() {
+        handle.abort();
+    }
+    Ok(())
+}
+
+async fn run_ai_stream(
+    app: &tauri::AppHandle,
+    config: &AiProviderConfig,
+    messages: &[AiMessage],
+) -> Result<(), String> {
+    match config.kind.as_str() {
+        "anthropic" => stream_anthropic(app, config, messages).await,
+        "ollama" => stream_ollama(app, config, messages).await,
+        "openai" => stream_openai_compat(app, config, messages).await,
+        other => Err(format!("Unknown provider: {other}")),
+    }
+}
+
+fn msgs_to_json(messages: &[AiMessage]) -> Vec<serde_json::Value> {
+    messages
+        .iter()
+        .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+        .collect()
+}
+
+fn emit_line_openai(app: &tauri::AppHandle, line: &str) -> bool {
+    if !line.starts_with("data: ") {
+        return false;
+    }
+    let data = line[6..].trim();
+    if data == "[DONE]" {
+        return true; // signal to stop
+    }
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
+        if let Some(text) = v["choices"][0]["delta"]["content"].as_str() {
+            if !text.is_empty() {
+                let _ = app.emit("ai-stream", AiStreamEvent::Token(text.to_string()));
+            }
+        }
+    }
+    false
+}
+
+async fn drain_sse_stream(
+    app: &tauri::AppHandle,
+    response: reqwest::Response,
+    is_anthropic: bool,
+) -> Result<(), String> {
+    let mut stream = response.bytes_stream();
+    let mut buffer = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        let last_nl = buffer.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let to_process = buffer[..last_nl].to_string();
+        buffer = buffer[last_nl..].to_string();
+
+        for line in to_process.lines() {
+            if is_anthropic {
+                if !line.starts_with("data: ") { continue; }
+                let data = line[6..].trim();
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
+                    if v["type"] == "content_block_delta" {
+                        if let Some(text) = v["delta"]["text"].as_str() {
+                            if !text.is_empty() {
+                                let _ = app.emit("ai-stream", AiStreamEvent::Token(text.to_string()));
+                            }
+                        }
+                    }
+                }
+            } else if emit_line_openai(app, line) {
+                return Ok(());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn make_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+async fn stream_anthropic(
+    app: &tauri::AppHandle,
+    config: &AiProviderConfig,
+    messages: &[AiMessage],
+) -> Result<(), String> {
+    let api_key = config.api_key.as_deref().unwrap_or("");
+    let mut system: Option<String> = None;
+    let user_msgs: Vec<serde_json::Value> = messages
+        .iter()
+        .filter_map(|m| {
+            if m.role == "system" {
+                system = Some(m.content.clone());
+                None
+            } else {
+                Some(serde_json::json!({ "role": m.role, "content": m.content }))
+            }
+        })
+        .collect();
+
+    let mut body = serde_json::json!({
+        "model": config.model,
+        "max_tokens": 4096,
+        "messages": user_msgs,
+        "stream": true,
+    });
+    if let Some(sys) = system {
+        body["system"] = serde_json::Value::String(sys);
+    }
+
+    let client = make_client()?;
+    let resp = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("Content-Type", "application/json")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Anthropic request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Anthropic HTTP {status}: {body_text}"));
+    }
+
+    drain_sse_stream(app, resp, true).await
+}
+
+async fn stream_ollama(
+    app: &tauri::AppHandle,
+    config: &AiProviderConfig,
+    messages: &[AiMessage],
+) -> Result<(), String> {
+    let base_url = config.base_url.as_deref().unwrap_or("http://localhost:11434");
+    let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": config.model,
+        "messages": msgs_to_json(messages),
+        "stream": true,
+    });
+
+    let client = make_client()?;
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Cannot reach Ollama at {url}: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Ollama HTTP {status}: {body_text}"));
+    }
+
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&chunk);
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                if let Some(content) = v["message"]["content"].as_str() {
+                    if !content.is_empty() {
+                        let _ = app.emit("ai-stream", AiStreamEvent::Token(content.to_string()));
+                    }
+                }
+                if v["done"].as_bool() == Some(true) { return Ok(()); }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn stream_openai_compat(
+    app: &tauri::AppHandle,
+    config: &AiProviderConfig,
+    messages: &[AiMessage],
+) -> Result<(), String> {
+    let base_url = config.base_url.as_deref().unwrap_or("https://api.openai.com/v1");
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    // Only send Authorization if a key was explicitly configured.
+    // Local servers like Jan require their own key or no header at all;
+    // injecting a fake "local" bearer causes 401s on Jan.
+    let effective_key = config
+        .api_key
+        .as_deref()
+        .filter(|k| !k.is_empty());
+
+    let body = serde_json::json!({
+        "model": config.model,
+        "messages": msgs_to_json(messages),
+        "stream": true,
+    });
+
+    let client = make_client()?;
+    let mut req = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(&body);
+    if let Some(key) = effective_key {
+        req = req.header("Authorization", format!("Bearer {key}"));
+    }
+
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Cannot reach {url}: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Server at {url} returned HTTP {status}: {body_text}"));
+    }
+
+    drain_sse_stream(app, resp, false).await
+}
+
+#[command]
+pub async fn write_ai_config(config: Option<AiProviderConfig>) -> Result<(), String> {
+    let path = ai_config_path();
+
+    // Preserve any existing non-ai keys in the config file
+    let mut yaml: serde_yaml::Value = if path.exists() {
+        let content = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|e| e.to_string())?;
+        serde_yaml::from_str(&content)
+            .unwrap_or_else(|_| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()))
+    } else {
+        serde_yaml::Value::Mapping(serde_yaml::Mapping::new())
+    };
+
+    let ai_value = match config {
+        None => serde_yaml::Value::Null,
+        Some(cfg) => {
+            let mut ai_map = serde_yaml::Mapping::new();
+            ai_map.insert(
+                serde_yaml::Value::String("provider".into()),
+                serde_yaml::Value::String(cfg.kind.clone()),
+            );
+            match cfg.kind.as_str() {
+                "anthropic" => {
+                    let mut m = serde_yaml::Mapping::new();
+                    if let Some(k) = cfg.api_key {
+                        m.insert(
+                            serde_yaml::Value::String("apiKey".into()),
+                            serde_yaml::Value::String(k),
+                        );
+                    }
+                    m.insert(
+                        serde_yaml::Value::String("model".into()),
+                        serde_yaml::Value::String(cfg.model),
+                    );
+                    ai_map.insert(
+                        serde_yaml::Value::String("anthropic".into()),
+                        serde_yaml::Value::Mapping(m),
+                    );
+                }
+                "ollama" => {
+                    let mut m = serde_yaml::Mapping::new();
+                    if let Some(u) = cfg.base_url {
+                        m.insert(
+                            serde_yaml::Value::String("baseUrl".into()),
+                            serde_yaml::Value::String(u),
+                        );
+                    }
+                    m.insert(
+                        serde_yaml::Value::String("model".into()),
+                        serde_yaml::Value::String(cfg.model),
+                    );
+                    ai_map.insert(
+                        serde_yaml::Value::String("ollama".into()),
+                        serde_yaml::Value::Mapping(m),
+                    );
+                }
+                "openai" => {
+                    let mut m = serde_yaml::Mapping::new();
+                    if let Some(k) = cfg.api_key {
+                        m.insert(
+                            serde_yaml::Value::String("apiKey".into()),
+                            serde_yaml::Value::String(k),
+                        );
+                    }
+                    if let Some(u) = cfg.base_url {
+                        m.insert(
+                            serde_yaml::Value::String("baseUrl".into()),
+                            serde_yaml::Value::String(u),
+                        );
+                    }
+                    m.insert(
+                        serde_yaml::Value::String("model".into()),
+                        serde_yaml::Value::String(cfg.model),
+                    );
+                    ai_map.insert(
+                        serde_yaml::Value::String("openai".into()),
+                        serde_yaml::Value::Mapping(m),
+                    );
+                }
+                _ => {}
+            }
+            serde_yaml::Value::Mapping(ai_map)
+        }
+    };
+
+    if let serde_yaml::Value::Mapping(ref mut root) = yaml {
+        root.insert(serde_yaml::Value::String("ai".into()), ai_value);
+    }
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let content = serde_yaml::to_string(&yaml).map_err(|e| e.to_string())?;
+    write_atomic(&path, content.as_bytes()).await
 }
 
 // ── Shell helpers ─────────────────────────────────────────────────────────────
