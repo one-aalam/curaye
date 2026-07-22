@@ -2,7 +2,7 @@
 id: ai
 title: "@curaye/ai — Provider Abstraction"
 domain: ai
-updated: 2026-07-21
+updated: 2026-07-22
 ---
 
 # @curaye/ai — Provider Abstraction
@@ -63,4 +63,21 @@ ai:
 
 - **Ollama** — `POST /api/chat` for chat, `/api/embeddings` for embed. Streams via NDJSON (`stream: true`).
 - **Anthropic** — `POST https://api.anthropic.com/v1/messages` with `anthropic-version: 2023-06-01` header. Streams via SSE. Default model: `claude-haiku-4-5-20251001`.
-- **OpenAI** — `POST https://api.openai.com/v1/chat/completions`. Streams via SSE. Embeddings via `POST /v1/embeddings` with `text-embedding-3-small`.
+- **OpenAI** — `POST https://api.openai.com/v1/chat/completions`. Streams via SSE. Embeddings via `POST /v1/embeddings` with `text-embedding-3-small`. Accepts an optional `baseUrl` field in config for OpenAI-compatible local servers.
+
+## Desktop — native Rust streaming layer
+
+The desktop app does **not** use `@curaye/ai` directly. The Tauri Rust backend (`src-tauri/src/commands/mod.rs`) contains its own provider implementations using `reqwest`, reading the same `~/.curaye/config.yaml` format. Streaming tokens are emitted as `ai-stream` Tauri events (Token / Done / Error) and consumed by `aiClient.ts` in the frontend. This bypasses WebView header restrictions that would block direct SSE from JavaScript.
+
+The desktop's `openai` provider path supports a `baseUrl` override for local OpenAI-compatible servers:
+
+```yaml
+ai:
+  provider: openai
+  openai:
+    baseUrl: http://127.0.0.1:6767/v1   # Jan, LM Studio, etc.
+    model: Jan-v3.5-4B-Q4_K_XL
+    # apiKey: optional — only needed if the server enforces auth
+```
+
+No `Authorization` header is sent unless `apiKey` is explicitly set. A 60-second `reqwest` timeout is applied to all provider connections.

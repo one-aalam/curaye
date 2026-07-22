@@ -39,8 +39,16 @@ Three resizable panels separated by drag-handle dividers. Widths are persisted i
 | `pick_directory` | Open OS directory picker (via `tauri-plugin-dialog`) |
 | `reveal_in_finder` | `open -R <path>` on macOS |
 | `sync_project` | No-op placeholder; delegates to `@curaye/sync` in a future spec |
+| `get_ai_config` | Read AI provider config from `~/.curaye/config.yaml` → `AiProviderConfig \| null` |
+| `write_ai_config` | Persist AI provider config to `~/.curaye/config.yaml` atomically |
+| `start_ai_stream` | Begin streaming AI completion; emits `ai-stream` Tauri events (Token / Done / Error) |
+| `cancel_ai_stream` | Abort the in-flight stream task |
 
 All file writes use atomic `write_atomic` (write `.tmp`, then `fs::rename`).
+
+## Tauri capabilities (`src-tauri/capabilities/default.json`)
+
+Grants `core:default`, `core:event:allow-listen`, `core:event:allow-unlisten`, `core:event:allow-emit`, and `dialog:default`. Tauri v2 blocks event listeners without explicit `core:event:allow-listen` — this file is required for the AI streaming event bus.
 
 ## Zustand stores (`src/stores/`)
 
@@ -50,13 +58,16 @@ All file writes use atomic `write_atomic` (write `.tmp`, then `fs::rename`).
 | `useTreeStore` | `ProjectTree` for selected project, expanded sections, selected doc path |
 | `useEditorStore` | Parsed document, unsaved flag, mode (structured/raw), validation issues, active highlighted field |
 | `useConfigStore` | Theme, left/middle panel widths — persisted to localStorage |
+| `usePaletteStore` | AI palette phase (input/streaming/diff), query, resolved action, streamed text, diff lines, AI config cache |
 
 ## Components (`src/components/`)
 
-- **`ProjectsSidebar`** — reads registry on mount; refreshes sync status every 30 s; right-click context menu (Reveal in Finder / Sync now / Unlink); "Add project" triggers `pick_directory`.
+- **`ProjectsSidebar`** — reads registry on mount; refreshes sync status every 30 s; right-click context menu (Reveal in Finder / Sync now / Unlink); "Add project" triggers `pick_directory`. Houses the `SettingsTrigger` in its footer.
 - **`DocumentTree`** — renders `planned/`, `current/`, `shipped/`, `decisions/`, root docs; status-badge dots (draft=grey, ready=blue, building=amber, done=green, shelved=dim); draft items (`_` prefix) grouped under "Drafts" subsection; red `AlertCircle` on items with validation errors; `+` button per section creates a new document and focuses the `title` field.
 - **`DocumentEditor`** — structured mode: segmented controls for status/effort/impact/desire, tag inputs for requires/tags, text inputs for release/created/updated; `updated` auto-fills to today on any field change. Raw mode: plain textarea for full file content. Mode switch round-trips via `serialize_document` / `parse_raw`. `⌘S` saves. Navigating away with unsaved changes shows a Save / Discard / Cancel prompt. Validation tray below editor lists errors and warnings; clicking an issue highlights the relevant field.
 - **`ResizablePanels`** — drag-handle dividers; clamps panel widths to sane min/max values.
+- **`AIPalette`** — `⌘K` modal with three phases: (1) input: free-text query + suggestion chips; (2) streaming: token-by-token output with blinking cursor, Cancel button; (3) diff: side-by-side Before/After view with Apply / Edit first / Discard actions. Does not open if a text input has focus. Restores focus on close. Shows an "AI not configured" view when no provider is set.
+- **`SettingsDrawer`** (`SettingsTrigger`) — right-side drawer with a theme picker (four swatches) and an AI provider section. Supports Anthropic (API key + model), Ollama (base URL + model), and OpenAI-compatible servers (API key optional, custom base URL for Jan/LM Studio). Saves via `write_ai_config` and refreshes `usePaletteStore` immediately.
 
 ## UI component library (`src/components/ui/`)
 
@@ -83,7 +94,6 @@ Each theme sets full CSS custom property palettes plus `--glass-bg`, `--glass-bo
 
 ## What is not yet built
 
-- AI command palette → spec `08-desktop-ai-palette`
 - Cross-project backlog view → spec `11-cross-project-backlog`
 - Release planning / kanban → spec `12-release-planning`
 - Settings and configuration UI → future spec
