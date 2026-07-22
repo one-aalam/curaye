@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, RefreshCw, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type RegistryProject } from "@/stores/projectStore";
 import { useTreeStore } from "@/stores/treeStore";
-import { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator } from "@/components/ui/menu";
+import { MenuRoot, MenuContent, MenuItem, MenuSeparator } from "@/components/ui/menu";
 import { SettingsTrigger } from "@/components/SettingsDrawer";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -19,42 +19,53 @@ function SyncDot({ status }: { status?: string | undefined }) {
   return <span className={cn("inline-block h-1.5 w-1.5 rounded-full flex-shrink-0", color)} />;
 }
 
+type VirtualAnchor = { getBoundingClientRect: () => DOMRect };
+
 function ProjectItem({ project, selected }: { project: RegistryProject; selected: boolean }) {
   const selectProject = useProjectStore((s) => s.selectProject);
   const loadTree = useTreeStore((s) => s.loadTree);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [anchor, setAnchor] = useState<VirtualAnchor | null>(null);
 
   const handleSelect = () => {
     selectProject(project.name);
-    loadTree(project.curaye_path);
+    void loadTree(project.curaye_path);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const x = e.clientX;
+    const y = e.clientY;
+    setAnchor({
+      getBoundingClientRect: () =>
+        DOMRect.fromRect({ x, y, width: 0, height: 0 }),
+    });
+    setMenuOpen(true);
   };
 
   return (
-    <MenuRoot>
-      <MenuTrigger
-        render={
-          <button
-            type="button"
-            onClick={handleSelect}
-            onContextMenu={(e) => e.preventDefault()}
-            className={cn(
-              "flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-xs transition-colors",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
-              selected
-                ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-            )}
-          >
-            <SyncDot status={project.sync_status} />
-            <span className="flex-1 truncate">{project.name}</span>
-            {(project.ready_count ?? 0) > 0 && (
-              <span className="text-[10px] text-sidebar-primary font-medium">
-                {project.ready_count}
-              </span>
-            )}
-          </button>
-        }
-      />
-      <MenuContent side="right" align="start" sideOffset={4}>
+    <MenuRoot open={menuOpen} onOpenChange={(open) => setMenuOpen(open)}>
+      <button
+        type="button"
+        onClick={handleSelect}
+        onContextMenu={handleContextMenu}
+        className={cn(
+          "flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-xs transition-colors",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+          selected
+            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+            : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+        )}
+      >
+        <SyncDot status={project.sync_status} />
+        <span className="flex-1 truncate">{project.name}</span>
+        {(project.ready_count ?? 0) > 0 && (
+          <span className="text-[10px] text-sidebar-primary font-medium">
+            {project.ready_count}
+          </span>
+        )}
+      </button>
+      <MenuContent anchor={anchor} side="bottom" align="start" sideOffset={4}>
         <MenuItem onClick={() => invoke("reveal_in_finder", { path: project.curaye_path })}>
           <FolderOpen size={12} />
           Reveal in Finder

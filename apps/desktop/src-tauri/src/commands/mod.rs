@@ -48,11 +48,18 @@ pub async fn read_registry() -> Result<Vec<RegistryProject>, String> {
     let projects = file
         .projects
         .into_iter()
-        .map(|e| RegistryProject {
-            name: e.name,
-            curaye_path: e.path,
-            sync_status: None,
-            ready_count: None,
+        .map(|e| {
+            // Registry stores the project root; curaye_path is always root/.curaye
+            let curaye_path = PathBuf::from(&e.path)
+                .join(".curaye")
+                .to_string_lossy()
+                .to_string();
+            RegistryProject {
+                name: e.name,
+                curaye_path,
+                sync_status: None,
+                ready_count: None,
+            }
         })
         .collect();
     Ok(projects)
@@ -68,9 +75,16 @@ pub async fn write_registry(projects: Vec<RegistryProject>) -> Result<(), String
     }
     let entries: Vec<RegistryEntry> = projects
         .into_iter()
-        .map(|p| RegistryEntry {
-            name: p.name,
-            path: p.curaye_path,
+        .map(|p| {
+            // Strip /.curaye suffix to store the project root
+            let root = PathBuf::from(&p.curaye_path)
+                .parent()
+                .map(|parent| parent.to_string_lossy().to_string())
+                .unwrap_or(p.curaye_path);
+            RegistryEntry {
+                name: p.name,
+                path: root,
+            }
         })
         .collect();
     let file = RegistryFile { projects: entries };
@@ -90,7 +104,8 @@ pub async fn link_project(path: String) -> Result<(), String> {
     let curaye_path = dir.join(".curaye").to_string_lossy().to_string();
 
     let mut projects = read_registry().await?;
-    if !projects.iter().any(|p| p.name == name) {
+    // Deduplicate by name or by resolved curaye_path
+    if !projects.iter().any(|p| p.name == name || p.curaye_path == curaye_path) {
         projects.push(RegistryProject {
             name,
             curaye_path,
