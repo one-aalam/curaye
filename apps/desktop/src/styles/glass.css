@@ -9,6 +9,9 @@
   --glass-blur:   12px;
   --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
   --glass-radius: var(--radius, 0.625rem);
+  /* raat fallbacks before data-theme attribute resolves */
+  --color-gold:   #f0a830;
+  --color-accent: #e05c1a;
 }
 
 [data-theme="saffron"] {
@@ -59,9 +62,9 @@
   --sidebar-border:      rgba(255, 255, 255, 0.08);
   --sidebar-ring:        #d4850a;
 
-  --glass-bg:     rgba(255, 248, 235, 0.72);
-  --glass-border: rgba(180, 120, 40, 0.14);
-  --glass-shadow: 0 4px 24px rgba(120, 80, 20, 0.10);
+  --glass-bg:     rgba(255, 248, 235, 0.68);
+  --glass-border: rgba(180, 120, 40, 0.20);
+  --glass-shadow: 0 4px 24px rgba(120, 80, 20, 0.12);
 }
 
 [data-theme="raat"] {
@@ -112,9 +115,9 @@
   --sidebar-border:      rgba(255, 255, 255, 0.06);
   --sidebar-ring:        #f0a830;
 
-  --glass-bg:     rgba(20, 14, 10, 0.55);
-  --glass-border: rgba(255, 210, 140, 0.10);
-  --glass-shadow: 0 4px 32px rgba(0, 0, 0, 0.40);
+  --glass-bg:     rgba(30, 22, 12, 0.50);
+  --glass-border: rgba(255, 210, 140, 0.22);
+  --glass-shadow: 0 4px 32px rgba(0, 0, 0, 0.45);
 }
 
 [data-theme="neel"] {
@@ -165,9 +168,9 @@
   --sidebar-border:      rgba(255, 255, 255, 0.06);
   --sidebar-ring:        #00c8c8;
 
-  --glass-bg:     rgba(10, 14, 28, 0.60);
-  --glass-border: rgba(120, 160, 255, 0.12);
-  --glass-shadow: 0 4px 32px rgba(0, 0, 0, 0.44);
+  --glass-bg:     rgba(16, 22, 44, 0.50);
+  --glass-border: rgba(120, 200, 255, 0.16);
+  --glass-shadow: 0 4px 32px rgba(0, 0, 0, 0.48);
 }
 
 [data-theme="chaadar"] {
@@ -218,7 +221,7 @@
   --sidebar-border:      rgba(255, 255, 255, 0.08);
   --sidebar-ring:        #7c4dff;
 
-  --glass-bg:     rgba(255, 255, 255, 0.70);
-  --glass-border: rgba(0, 0, 0, 0.08);
-  --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
+  --glass-bg:     rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(124, 77, 255, 0.14);
+  --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.09);
 }

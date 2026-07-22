@@ -104,10 +104,19 @@ export function ProjectsSidebar() {
 
   return (
     <aside
-      className="flex flex-col h-full"
-      style={{ background: "var(--sidebar)" }}
+      className="flex flex-col h-full vibrancy-sidebar"
+      style={{
+        background: "var(--sidebar)",
+        backdropFilter: "blur(var(--glass-blur))",
+        borderRight: "1px solid var(--glass-border)",
+      }}
     >
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-sidebar-border">
+      {/* Overlay titlebar spacer — drag region for traffic lights */}
+      <div
+        className="drag-region flex-shrink-0"
+        style={{ height: "env(titlebar-area-height, 38px)" }}
+      />
+      <div className="flex items-center justify-between px-3 py-2 border-b border-sidebar-border">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
           Projects
         </span>

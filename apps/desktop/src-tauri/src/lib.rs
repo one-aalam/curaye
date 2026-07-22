@@ -1,5 +1,6 @@
 mod commands;
 
+use tauri::Manager;
 use commands::{
     cancel_ai_stream, create_document, get_ai_config, link_project, parse_raw, pick_directory,
     read_document, read_registry, reveal_in_finder, scan_project, serialize_document,
@@ -30,6 +31,24 @@ pub fn run() {
             start_ai_stream,
             cancel_ai_stream,
         ])
+        .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+
+            #[cfg(target_os = "macos")]
+            {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, Some(12.0))
+                    .expect("failed to apply vibrancy");
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                use window_vibrancy::apply_mica;
+                apply_mica(&window, Some(true)).expect("failed to apply mica");
+            }
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

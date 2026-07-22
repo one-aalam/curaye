@@ -9,12 +9,28 @@ import { AIPalette } from "@/components/AIPalette";
 
 export function App() {
   const theme = useConfigStore((s) => s.theme);
+  const uiFont = useConfigStore((s) => s.uiFont);
   const openPalette = usePaletteStore((s) => s.openPalette);
   const isPaletteOpen = usePaletteStore((s) => s.open);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    const html = document.documentElement;
+    html.setAttribute("data-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    if (uiFont === "inter") {
+      html.removeAttribute("data-ui-font");
+    } else {
+      html.setAttribute("data-ui-font", uiFont);
+    }
+  }, [uiFont]);
+
+  useEffect(() => {
+    // Mark the document as running inside Tauri so vibrancy CSS rules apply
+    document.documentElement.classList.add("tauri");
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -32,7 +48,16 @@ export function App() {
   }, [handleKeyDown]);
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div
+      className="h-screen w-screen overflow-hidden text-foreground relative vibrancy-bg"
+      style={{
+        backgroundColor: "var(--background)",
+        backgroundImage: [
+          "radial-gradient(ellipse 60% 50% at 80% 5%, color-mix(in srgb, var(--color-gold) 22%, transparent), transparent 100%)",
+          "radial-gradient(ellipse 55% 40% at 5% 90%, color-mix(in srgb, var(--color-accent) 14%, transparent), transparent 100%)",
+        ].join(", "),
+      }}
+    >
       <ThreePanelLayout
         left={<ProjectsSidebar />}
         middle={<DocumentTree />}

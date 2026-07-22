@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Settings, Check, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useConfigStore, type Theme } from "@/stores/configStore";
+import { useConfigStore, type Theme, type UiFont } from "@/stores/configStore";
 import { usePaletteStore } from "@/stores/paletteStore";
 import { fetchAiConfig, type AiProviderConfig } from "@/lib/aiClient";
 import {
@@ -23,15 +23,29 @@ const THEMES: { id: Theme; label: string; color: string }[] = [
   { id: "chaadar", label: "Chaadar", color: "#7c4dff" },
 ];
 
+const UI_FONTS: { id: UiFont; label: string; sample: string }[] = [
+  { id: "inter",         label: "Inter",         sample: "Ag" },
+  { id: "dm-sans",       label: "DM Sans",       sample: "Ag" },
+  { id: "work-sans",     label: "Work Sans",      sample: "Ag" },
+  { id: "space-grotesk", label: "Space Grotesk",  sample: "Ag" },
+];
+
+const FONT_FAMILY: Record<UiFont, string> = {
+  "inter":         "'Inter Variable', sans-serif",
+  "dm-sans":       "'DM Sans Variable', sans-serif",
+  "work-sans":     "'Work Sans Variable', sans-serif",
+  "space-grotesk": "'Space Grotesk Variable', sans-serif",
+};
+
 function ThemeSection() {
-  const { theme, setTheme } = useConfigStore();
+  const { theme, setTheme, uiFont, setUiFont } = useConfigStore();
 
   return (
     <section>
       <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
         Appearance
       </h3>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 mb-5">
         {THEMES.map((t) => (
           <div key={t.id} className="flex flex-col items-center gap-1.5">
             <ColorSwatch
@@ -42,6 +56,33 @@ function ThemeSection() {
             />
             <span className="text-[9px] text-muted-foreground">{t.label}</span>
           </div>
+        ))}
+      </div>
+
+      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        UI Font
+      </h3>
+      <div className="flex items-center gap-2">
+        {UI_FONTS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setUiFont(f.id)}
+            className={cn(
+              "flex flex-col items-center gap-1 rounded-lg px-3 py-2 transition-colors border",
+              uiFont === f.id
+                ? "bg-primary/10 border-primary/40 text-primary"
+                : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
+            )}
+          >
+            <span
+              className="text-base leading-none"
+              style={{ fontFamily: FONT_FAMILY[f.id] }}
+            >
+              {f.sample}
+            </span>
+            <span className="text-[9px] whitespace-nowrap">{f.label}</span>
+          </button>
         ))}
       </div>
     </section>

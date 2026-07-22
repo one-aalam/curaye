@@ -19,9 +19,13 @@
         "minHeight": 600,
         "resizable": true,
         "decorations": true,
-        "transparent": false
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "center": true
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }

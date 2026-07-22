@@ -81,11 +81,28 @@ export function ThreePanelLayout({ left, middle, right }: ThreePanelLayoutProps)
         {left}
       </div>
       <Divider onDrag={handleLeftDrag} />
-      <div style={{ width: middlePanelWidth, flexShrink: 0 }} className="overflow-hidden border-l border-border/30">
+      <div
+        style={{
+          width: middlePanelWidth,
+          flexShrink: 0,
+          background: "var(--card)",
+          backdropFilter: "blur(var(--glass-blur))",
+          borderLeft: "1px solid var(--glass-border)",
+          boxShadow: "inset 0 1px 0 var(--glass-border)",
+        }}
+        className="overflow-hidden"
+      >
         {middle}
       </div>
       <Divider onDrag={handleMiddleDrag} />
-      <div className="flex-1 overflow-hidden border-l border-border/30">
+      <div
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          borderLeft: "1px solid var(--glass-border)",
+          backdropFilter: "blur(4px)",
+        }}
+      >
         {right}
       </div>
     </div>
