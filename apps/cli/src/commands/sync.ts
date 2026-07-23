@@ -2,7 +2,7 @@ import type { Command } from 'commander'
 import os from 'os'
 import path from 'path'
 import { intro, outro, spinner } from '@clack/prompts'
-import { ProjectRegistry, trackAgentChanges } from '@curaye/core'
+import { ProjectRegistry, trackAgentChanges, DriftDetector } from '@curaye/core'
 import type { AgentChangeType } from '@curaye/core'
 import {
   push,
@@ -105,6 +105,13 @@ export function registerSync(program: Command): void {
             } catch {
               // Non-fatal
             }
+
+            // Clear drift ignores so next check shows fresh findings
+            try {
+              await DriftDetector.clearIgnores(project.id)
+            } catch {
+              // Non-fatal
+            }
           }
 
           await syncRegistry(projects, config)
@@ -156,6 +163,13 @@ export function registerSync(program: Command): void {
           await trackAgentChanges(latestProject, project.path, curiyePath, today(), summaryGen)
         } catch {
           // Non-fatal — agent tracking failure should not block sync
+        }
+
+        // Clear drift ignores so next check shows fresh findings
+        try {
+          await DriftDetector.clearIgnores(project.id)
+        } catch {
+          // Non-fatal
         }
 
         const projects = await ProjectRegistry.read()

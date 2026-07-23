@@ -60,6 +60,12 @@ function ProjectItem({ project, selected }: { project: RegistryProject; selected
       >
         <SyncDot status={project.sync_status} />
         <span className="flex-1 truncate">{project.name}</span>
+        {(project.drift_count ?? 0) > 0 && (
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 bg-amber-400"
+            title={`${project.drift_count} drift finding${(project.drift_count ?? 0) === 1 ? "" : "s"}`}
+          />
+        )}
         {(project.ready_count ?? 0) > 0 && (
           <span className="text-[10px] text-sidebar-primary font-medium">
             {project.ready_count}

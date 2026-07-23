@@ -21,6 +21,7 @@ import { registerAgents } from './commands/agents.js'
 import { registerBacklog } from './commands/backlog.js'
 import { registerRelease } from './commands/release.js'
 import { registerBrief } from './commands/brief.js'
+import { registerCheck } from './commands/check.js'
 
 const program = new Command()
 
@@ -54,6 +55,7 @@ registerAgents(program)
 registerBacklog(program)
 registerRelease(program)
 registerBrief(program)
+registerCheck(program)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   process.stderr.write((err instanceof Error ? err.message : String(err)) + '\n')

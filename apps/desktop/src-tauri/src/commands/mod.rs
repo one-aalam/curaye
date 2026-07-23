@@ -15,6 +15,7 @@ pub struct RegistryProject {
     pub curaye_path: String,
     pub sync_status: Option<String>,
     pub ready_count: Option<u32>,
+    pub drift_count: Option<u32>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -22,10 +23,14 @@ struct RegistryFile {
     projects: Vec<RegistryEntry>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct RegistryEntry {
     name: String,
     path: String,
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    adopts: Vec<String>,
 }
 
 fn registry_path() -> PathBuf {
@@ -54,11 +59,14 @@ pub async fn read_registry() -> Result<Vec<RegistryProject>, String> {
                 .join(".curaye")
                 .to_string_lossy()
                 .to_string();
+            // Use id if present, fallback to name
+            let _entry_id = if e.id.is_empty() { e.name.clone() } else { e.id.clone() };
             RegistryProject {
                 name: e.name,
                 curaye_path,
                 sync_status: None,
                 ready_count: None,
+                drift_count: None,
             }
         })
         .collect();
@@ -84,6 +92,8 @@ pub async fn write_registry(projects: Vec<RegistryProject>) -> Result<(), String
             RegistryEntry {
                 name: p.name,
                 path: root,
+                id: String::new(),
+                adopts: Vec::new(),
             }
         })
         .collect();
@@ -111,6 +121,7 @@ pub async fn link_project(path: String) -> Result<(), String> {
             curaye_path,
             sync_status: None,
             ready_count: None,
+            drift_count: None,
         });
         write_registry(projects).await?;
     }
@@ -1943,6 +1954,233 @@ pub async fn promote_to_shared(
         is_update,
         projects_notified,
     })
+}
+
+// ── Drift detection ───────────────────────────────────────────────────────────
+
+fn drift_ignores_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("drift-ignores.yaml")
+}
+
+fn shared_base_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("shared")
+}
+
+fn shared_reviews_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("shared-reviews")
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct DriftIgnoresFile {
+    #[serde(default)]
+    ignores: Vec<DriftIgnoreEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DriftIgnoreEntry {
+    #[serde(rename = "projectId")]
+    project_id: String,
+    #[serde(rename = "docId")]
+    doc_id: String,
+}
+
+async fn load_ignored_docs(project_id: &str) -> std::collections::HashSet<String> {
+    let path = drift_ignores_path();
+    if !path.exists() {
+        return std::collections::HashSet::new();
+    }
+    let Ok(content) = tokio::fs::read_to_string(&path).await else {
+        return std::collections::HashSet::new();
+    };
+    let file: DriftIgnoresFile = serde_yaml::from_str(&content).unwrap_or_default();
+    file.ignores
+        .into_iter()
+        .filter(|e| e.project_id == project_id)
+        .map(|e| e.doc_id)
+        .collect()
+}
+
+const DRIFT_COMMON_WORDS: &[&str] = &[
+    "the", "and", "for", "are", "but", "not", "you", "all", "any", "can",
+    "was", "one", "our", "out", "day", "get", "has", "how", "its", "let",
+    "may", "now", "say", "see", "set", "two", "way", "who", "did", "man",
+    "new", "put", "too", "use", "via", "this", "that", "with", "have",
+    "from", "they", "will", "been", "when", "more", "than", "what", "some",
+    "each", "then", "them", "also", "into", "your", "over", "even", "most",
+    "just", "such", "well", "back", "only", "here", "both", "much", "were",
+    "same", "need", "like", "very", "take", "used", "make", "data", "type",
+    "base", "code", "file", "name", "list", "page", "text", "true", "main",
+    "must", "docs", "view", "spec", "test", "work", "does", "able", "call",
+    "show", "keep", "sure", "left", "read", "user", "path", "long", "run",
+    "done", "item", "key", "api", "url", "ide", "cli", "app",
+];
+
+fn extract_key_terms(text: &str) -> std::collections::HashSet<String> {
+    let mut terms = std::collections::HashSet::new();
+    let common: std::collections::HashSet<&str> = DRIFT_COMMON_WORDS.iter().copied().collect();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].is_ascii_alphabetic() {
+            let start = i;
+            // Consume alphanumeric and hyphen (for package-style names)
+            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '-') {
+                i += 1;
+            }
+            let word: String = chars[start..i].iter().collect();
+            // Strip trailing hyphens
+            let word = word.trim_end_matches('-').to_string();
+            if word.len() < 3 { continue; }
+            let lower = word.to_lowercase();
+            if !common.contains(lower.as_str()) {
+                terms.insert(lower);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    terms
+}
+
+fn compute_term_drift(shared_raw: &str, local_content: &str) -> bool {
+    let shared_terms = extract_key_terms(shared_raw);
+    let local_terms = extract_key_terms(local_content);
+    let missing: Vec<_> = shared_terms.iter().filter(|t| {
+        if local_terms.contains(*t) { return false; }
+        let lookslike_tech = t.chars().any(|c| c.is_ascii_digit()) || t.contains('-') || t.len() > 6;
+        lookslike_tech
+    }).collect();
+    !missing.is_empty()
+}
+
+async fn read_project_local_content(project_path: &str) -> String {
+    let curaye_path = PathBuf::from(project_path).join(".curaye");
+    let mut parts: Vec<String> = Vec::new();
+    for root_file in &["stack.md", "prd.md"] {
+        if let Ok(content) = tokio::fs::read_to_string(curaye_path.join(root_file)).await {
+            parts.push(content);
+        }
+    }
+    for section in &["decisions", "current"] {
+        let dir = curaye_path.join(section);
+        let Ok(mut entries) = tokio::fs::read_dir(&dir).await else { continue; };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
+            if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                parts.push(content);
+            }
+        }
+    }
+    parts.join("\n")
+}
+
+/// Count unresolved drift findings for a project (used for desktop sidebar badge).
+#[command]
+pub async fn check_project_drift(project_name: String, project_path: String) -> Result<u32, String> {
+    let reg_path = registry_path();
+    if !reg_path.exists() {
+        return Ok(0);
+    }
+    let content = tokio::fs::read_to_string(&reg_path).await.map_err(|e| e.to_string())?;
+    let file: RegistryFile = serde_yaml::from_str(&content).map_err(|e| e.to_string())?;
+
+    // Find this project's adopts list
+    let project_entry = file.projects.iter().find(|p| p.name == project_name || p.path == project_path);
+    let adopts = match project_entry {
+        Some(e) => e.adopts.clone(),
+        None => return Ok(0),
+    };
+
+    let project_id = match project_entry {
+        Some(e) if !e.id.is_empty() => e.id.clone(),
+        _ => project_name.clone(),
+    };
+
+    if adopts.is_empty() {
+        return Ok(0);
+    }
+
+    let ignored = load_ignored_docs(&project_id).await;
+    let shared_base = shared_base_path();
+    let reviews_dir = shared_reviews_path();
+    let local_content = read_project_local_content(&project_path).await;
+    let categories = ["decisions", "patterns", "design", "agents", "stack"];
+
+    let mut count: u32 = 0;
+
+    for doc_ref in &adopts {
+        let parts: Vec<&str> = doc_ref.split('/').collect();
+        let doc_id = match parts.last() {
+            Some(id) if !id.is_empty() => *id,
+            _ => continue,
+        };
+
+        if ignored.contains(doc_id) {
+            continue;
+        }
+
+        // Find the shared doc in any category
+        let mut shared_raw: Option<String> = None;
+        for cat in &categories {
+            let path = shared_base.join(cat).join(format!("{}.md", doc_id));
+            if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                shared_raw = Some(content);
+                break;
+            }
+        }
+
+        let Some(shared_content) = shared_raw else { continue; };
+
+        // Check pending update: review snapshot differs from current shared doc
+        let review_path = reviews_dir.join(&project_id).join(format!("{}.md", doc_id));
+        if let Ok(snapshot) = tokio::fs::read_to_string(&review_path).await {
+            if snapshot != shared_content {
+                count += 1;
+                continue;
+            }
+        }
+
+        // Check for intentional override in local decisions
+        let curaye_decisions = PathBuf::from(&project_path).join(".curaye").join("decisions");
+        let mut has_override = false;
+        if let Ok(mut entries) = tokio::fs::read_dir(&curaye_decisions).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
+                if let Ok(raw) = tokio::fs::read_to_string(&path).await {
+                    let fm = parse_frontmatter_quick(&raw);
+                    if let Some(v) = fm.get("superseded_by") {
+                        let val_str = match v {
+                            serde_yaml::Value::String(s) => s.clone(),
+                            _ => format!("{:?}", v),
+                        };
+                        if val_str == *doc_ref {
+                            has_override = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if has_override { continue; }
+
+        // Text comparison
+        if compute_term_drift(&shared_content, &local_content) {
+            count += 1;
+        }
+    }
+
+    Ok(count)
 }
 
 // ── Atomic write ──────────────────────────────────────────────────────────────

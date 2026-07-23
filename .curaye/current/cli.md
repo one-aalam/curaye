@@ -50,7 +50,7 @@ updated: 2026-07-23
 
 | Command | Description |
 |---|---|
-| `curaye sync [--project <id>] [--all] [--pull\|--push]` | Pushes (default) or pulls `.curaye/` content. `--all` syncs every registered project. After each project sync, runs agent file tracking (non-fatal). |
+| `curaye sync [--project <id>] [--all] [--pull\|--push]` | Pushes (default) or pulls `.curaye/` content. `--all` syncs every registered project. After each project sync, runs agent file tracking (non-fatal) and clears drift ignores for that project (`~/.curaye/drift-ignores.yaml`). |
 | `curaye sync status` | Reports ahead/behind/clean state vs remote. |
 | `curaye sync init <remote-url>` | One-time setup: clones or initialises the sync repo at `~/.curaye/sync/`. |
 
@@ -97,6 +97,12 @@ All AI commands require a configured provider.
 | `curaye shared adopt <id> [--project <id>]` | Declares adoption of a shared document for the given project; records the current state as the diff baseline; infers project from cwd when `--project` is omitted. |
 | `curaye shared diff <id> [--project <id>]` | Shows what changed in a shared document since the project last reviewed it (LCS line diff). Errors if no baseline exists — run `adopt` first. |
 | `curaye shared notifications [--mark-reviewed <docId> --project <id>]` | Lists pending update notifications. `--mark-reviewed` clears the notification for the given doc/project pair and updates the review snapshot. |
+
+## Drift detection
+
+| Command | Description |
+|---|---|
+| `curaye check [--project <id>] [--all] [--fix] [--json]` | Check a project (or all registered projects) for drift against its adopted shared documents. Prints per-finding output with `✓` / `⚠` icons. `--all` groups findings by project. `--fix` walks through each actionable finding interactively: for drift, offers "Record a local override decision" (creates a `decisions/` file with `superseded_by` frontmatter), "Open local content to update it", or "Ignore for now"; for pending-update, offers "Review the diff", "Mark as reviewed" (updates review snapshot), or "Ignore for now". "Ignore for now" writes to `~/.curaye/drift-ignores.yaml` and suppresses the finding on subsequent checks; ignores are cleared after the next `curaye sync`. Exits with code `1` when any finding is classified as `drift` (useful in CI/CD pre-sync hooks). Exits `0` for `pending-update` only. |
 
 ## Bootstrap and import
 

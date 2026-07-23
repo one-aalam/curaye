@@ -56,6 +56,7 @@ Three resizable panels separated by drag-handle dividers. Widths are persisted i
 | `get_last_opened` | Read when a project was last opened in the desktop from `~/.curaye/desktop-state.json`; returns `Option<String>` date |
 | `set_last_opened` | Write today's date for a project to `~/.curaye/desktop-state.json` |
 | `promote_to_shared` | Promote a `current/` or `decisions/` document to `~/.curaye/shared/<category>/<id>.md`. Injects `source_project`, `promoted`, `adopted_by` frontmatter; notifies other registered projects; optionally adds `promoted_to` to the source. Errors if source is from `planned/` or category is invalid. Returns `PromoteSharedResult { sharedPath, docRef, isUpdate, projectsNotified }`. |
+| `check_project_drift` | Count unresolved drift findings for a project. Reads the project's `adopts` list from the registry; for each adopted doc, checks whether the review snapshot differs from the current shared doc (pending update), whether any local decision has `superseded_by` matching the ref (intentional override), and runs keyword-term extraction for text-level drift. Returns a `u32` count of `drift` + `pending-update` findings not present in `~/.curaye/drift-ignores.yaml`. Used to populate the sidebar badge. |
 
 All file writes use atomic `write_atomic` (write `.tmp`, then `fs::rename`).
 
@@ -69,7 +70,7 @@ Grants `core:default`, `core:event:allow-listen`, `core:event:allow-unlisten`, `
 
 | Store | Holds |
 |---|---|
-| `useProjectStore` | Registry projects list, selected project name, sync refresh interval |
+| `useProjectStore` | Registry projects list (each with optional `drift_count: number` populated by `check_project_drift`), selected project name, sync refresh interval; drift counts are loaded in background after `loadProjects()` and refreshed on the 30-second `refreshSyncStatus` cycle |
 | `useTreeStore` | `ProjectTree` for selected project, expanded sections, selected doc path |
 | `useEditorStore` | Parsed document, unsaved flag, mode (structured/raw), validation issues, active highlighted field |
 | `useConfigStore` | Theme, left/middle panel widths — persisted to localStorage |
@@ -81,7 +82,7 @@ Grants `core:default`, `core:event:allow-listen`, `core:event:allow-unlisten`, `
 
 ## Components (`src/components/`)
 
-- **`ProjectsSidebar`** — reads registry on mount; refreshes sync status every 30 s; right-click context menu (Reveal in Finder / Sync now / Unlink); "Add project" triggers `pick_directory`. Footer contains "Backlog" toggle and `SettingsTrigger`.
+- **`ProjectsSidebar`** — reads registry on mount; refreshes sync status (and drift counts) every 30 s; right-click context menu (Reveal in Finder / Sync now / Unlink); "Add project" triggers `pick_directory`. Footer contains "Backlog" toggle and `SettingsTrigger`. Each project row shows an amber dot (`bg-amber-400`) when `drift_count > 0`, with a tooltip showing the count.
 - **`DocumentTree`** — renders a project name header with a "Brief" button (always visible; highlighted amber when the project is dormant), a `ReentryBanner` (shows when `isDormant` from `useBriefStore` — project not opened in >30 days — dismissed per-session), followed by `planned/`, `current/`, `shipped/`, `decisions/`, root docs, and a `releases/` section. Status-badge dots (draft=grey, ready=blue, building=amber, done=green, shelved=dim); draft items (`_` prefix) grouped under "Drafts" subsection; red `AlertCircle` on items with validation errors; `+` button per section creates a new document and focuses the `title` field. The `releases/` section shows per-release progress bars (`done/total`); shipped releases are collapsed under a "Shipped (N)" toggle by default; clicking a release sets `view = 'releases'` and opens `ReleaseView`. Right-clicking a `current/` or `decisions/` document opens a context menu with a "Promote to shared layer" item, which opens `PromoteModal`.
 - **`DocumentEditor`** — structured mode: segmented controls for status/effort/impact/desire, tag inputs for requires/tags, text inputs for release/created/updated; `updated` auto-fills to today on any field change. Raw mode: plain textarea for full file content. Mode switch round-trips via `serialize_document` / `parse_raw`. `⌘S` saves. Navigating away with unsaved changes shows a Save / Discard / Cancel prompt. Validation tray below editor lists errors and warnings; clicking an issue highlights the relevant field.
 - **`ResizablePanels`** — drag-handle dividers; clamps panel widths to sane min/max values.

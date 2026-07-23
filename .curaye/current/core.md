@@ -210,6 +210,46 @@ interface ReleaseSummary {
 
 `create()` converts the `name` argument to a slug (`v0.3.0` → `v0-3-0`) for the filename. The `list()` method cross-references `planned/` to compute `total` and `done` counts per release.
 
+## `DriftDetector`
+
+Compares a project's adopted shared documents against its local content to surface undocumented divergence. Ignores are persisted to `~/.curaye/drift-ignores.yaml`; cleared automatically when the project syncs.
+
+```ts
+class DriftDetector {
+  static async checkProject(project: RegistryProject): Promise<DriftReport>
+  static async checkAll(): Promise<DriftReport[]>
+  static async addIgnore(projectId: string, docId: string): Promise<void>
+  static async clearIgnores(projectId: string): Promise<void>
+  static async countDrift(project: RegistryProject): Promise<number>
+}
+
+type DriftClassification = 'drift' | 'intentional-override' | 'pending-update' | 'no-drift'
+
+interface DriftFinding {
+  sharedDocId:    string
+  docRef:         string               // e.g. 'shared/decisions/why-sqlite'
+  classification: DriftClassification
+  description:    string
+  hint?:          string
+}
+
+interface DriftReport {
+  projectId:    string
+  projectPath:  string
+  checkedCount: number                 // number of adopted docs checked
+  findings:     DriftFinding[]         // only non-'no-drift' findings included
+}
+```
+
+**Detection algorithm** (no AI required):
+
+1. For each doc ref in `project.adopts`, ignore entries present in `~/.curaye/drift-ignores.yaml` for this project.
+2. Check `SharedLayer.diff(docId, projectId)`: non-empty diff → `pending-update`.
+3. Scan `decisions/` for any file with `superseded_by: <docRef>` frontmatter → `intentional-override` (not drift).
+4. Run `computeTermDrift`: extract key technology terms from the shared doc body (alphanumeric tokens >2 chars, excluding common English words) and check their presence in local `stack.md`, `decisions/`, and `current/` content. Significant missing terms → `drift`.
+
+`countDrift()` returns only `drift`-classified finding count (not `pending-update`), for use as a badge threshold. `clearIgnores()` is called by `curaye sync` after each successful push or pull.
+
 ## Error types
 
 ```ts
