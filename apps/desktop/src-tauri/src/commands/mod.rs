@@ -1741,6 +1741,210 @@ pub async fn set_last_opened(curaye_path: String, date: String) -> Result<(), St
     write_desktop_state(&state).await
 }
 
+// ── Pattern promotion ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoteSharedResult {
+    pub shared_path: String,
+    pub doc_ref: String,
+    pub is_update: bool,
+    pub projects_notified: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct NotificationsFile {
+    #[serde(default)]
+    notifications: Vec<NotificationEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct NotificationEntry {
+    #[serde(rename = "docId")]
+    doc_id: String,
+    category: String,
+    #[serde(rename = "adoptedBy")]
+    adopted_by: Vec<String>,
+    #[serde(rename = "updatedAt")]
+    updated_at: String,
+}
+
+fn notifications_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("notifications.yaml")
+}
+
+async fn update_shared_notification(
+    doc_id: &str,
+    category: &str,
+    adopted_by: Vec<String>,
+    updated_at: &str,
+) -> Result<(), String> {
+    let nf_path = notifications_path();
+    let mut nf: NotificationsFile = if nf_path.exists() {
+        let content = tokio::fs::read_to_string(&nf_path)
+            .await
+            .map_err(|e| e.to_string())?;
+        serde_yaml::from_str(&content).unwrap_or_default()
+    } else {
+        NotificationsFile::default()
+    };
+
+    let entry = NotificationEntry {
+        doc_id: doc_id.to_string(),
+        category: category.to_string(),
+        adopted_by,
+        updated_at: updated_at.to_string(),
+    };
+
+    let existing = nf.notifications.iter().position(|n| n.doc_id == doc_id);
+    if let Some(idx) = existing {
+        nf.notifications[idx] = entry;
+    } else {
+        nf.notifications.push(entry);
+    }
+
+    if let Some(parent) = nf_path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+    }
+
+    let content = serde_yaml::to_string(&nf).map_err(|e| e.to_string())?;
+    write_atomic(&nf_path, content.as_bytes()).await
+}
+
+#[command]
+pub async fn promote_to_shared(
+    source_path: String,
+    category: String,
+    doc_id: String,
+    project_id: String,
+    update_source: bool,
+) -> Result<PromoteSharedResult, String> {
+    let valid_categories = ["decisions", "patterns", "design", "agents", "stack"];
+    if !valid_categories.contains(&category.as_str()) {
+        return Err(format!("Invalid category '{}'", category));
+    }
+
+    let source_path_obj = PathBuf::from(&source_path);
+
+    // Detect section: the parent directory name of the source file
+    let parent_dir = source_path_obj
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+
+    if parent_dir == "planned" {
+        return Err("Only current/ and decisions/ documents can be promoted.".to_string());
+    }
+
+    let source_content = tokio::fs::read_to_string(&source_path_obj)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let (mut fm, body) = split_frontmatter(&source_content);
+
+    // Build shared document path
+    let shared_base = dirs::home_dir()
+        .ok_or_else(|| "Cannot determine home directory".to_string())?
+        .join(".curaye")
+        .join("shared");
+
+    let category_dir = shared_base.join(&category);
+    tokio::fs::create_dir_all(&category_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let shared_path = category_dir.join(format!("{}.md", doc_id));
+    let doc_ref = format!("shared/{}/{}", category, doc_id);
+
+    // Detect update vs new promotion, carry forward existing adopted_by
+    let is_update = shared_path.exists();
+    let mut existing_adopted: Vec<String> = Vec::new();
+    if is_update {
+        if let Ok(existing_content) = tokio::fs::read_to_string(&shared_path).await {
+            let (existing_fm, _) = split_frontmatter(&existing_content);
+            if let Some(serde_yaml::Value::Sequence(seq)) = existing_fm.get("adopted_by") {
+                existing_adopted = seq
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect();
+            }
+        }
+    }
+
+    // Build adopted_by: existing + current project (deduped)
+    if !existing_adopted.contains(&project_id) {
+        existing_adopted.push(project_id.clone());
+    }
+
+    // Set shared-layer metadata
+    let today = chrono_today();
+    fm.insert(
+        "source_project".to_string(),
+        serde_yaml::Value::String(project_id.clone()),
+    );
+    fm.insert(
+        "promoted".to_string(),
+        serde_yaml::Value::String(today.clone()),
+    );
+    fm.insert(
+        "adopted_by".to_string(),
+        serde_yaml::Value::Sequence(
+            existing_adopted
+                .iter()
+                .map(|s| serde_yaml::Value::String(s.clone()))
+                .collect(),
+        ),
+    );
+
+    let fm_yaml = serde_yaml::to_string(&fm).map_err(|e| e.to_string())?;
+    let shared_content = format!("---\n{}---{}", fm_yaml, body);
+    write_atomic(&shared_path, shared_content.as_bytes()).await?;
+
+    // Notify other registered projects
+    let reg_path = registry_path();
+    let all_projects: Vec<RegistryEntry> = if reg_path.exists() {
+        let content = tokio::fs::read_to_string(&reg_path).await.unwrap_or_default();
+        let file: RegistryFile = serde_yaml::from_str(&content).unwrap_or_default();
+        file.projects
+    } else {
+        Vec::new()
+    };
+
+    let other_projects: Vec<String> = all_projects
+        .iter()
+        .filter(|p| p.name != project_id)
+        .map(|p| p.name.clone())
+        .collect();
+
+    let projects_notified = other_projects.len();
+    if !other_projects.is_empty() {
+        update_shared_notification(&doc_id, &category, other_projects, &today).await?;
+    }
+
+    // Optionally back-link source document
+    if update_source {
+        let (mut src_fm, src_body) = split_frontmatter(&source_content);
+        src_fm.insert(
+            "promoted_to".to_string(),
+            serde_yaml::Value::String(doc_ref.clone()),
+        );
+        let src_fm_yaml = serde_yaml::to_string(&src_fm).map_err(|e| e.to_string())?;
+        let updated_source = format!("---\n{}---{}", src_fm_yaml, src_body);
+        write_atomic(&source_path_obj, updated_source.as_bytes()).await?;
+    }
+
+    Ok(PromoteSharedResult {
+        shared_path: shared_path.to_string_lossy().to_string(),
+        doc_ref,
+        is_update,
+        projects_notified,
+    })
+}
+
 // ── Atomic write ──────────────────────────────────────────────────────────────
 
 async fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {

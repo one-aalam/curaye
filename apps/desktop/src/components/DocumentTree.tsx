@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, ChevronDown, Plus, AlertCircle, Package, FileText, Sparkles } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, AlertCircle, Package, FileText, Sparkles, ArrowUpFromLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTreeStore, type TreeNode, type DocSection, type ReleaseSummary } from "@/stores/treeStore";
 import { useEditorStore } from "@/stores/editorStore";
@@ -7,6 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "@/stores/projectStore";
 import { useViewStore } from "@/stores/viewStore";
 import { useBriefStore } from "@/stores/briefStore";
+import { PromoteModal } from "@/components/PromoteModal";
+import { MenuRoot, MenuContent, MenuItem } from "@/components/ui/menu";
 
 const STATUS_DOT: Record<string, string> = {
   draft: "bg-zinc-400",
@@ -42,32 +44,77 @@ function TreeItem({ node, section }: { node: TreeNode; section: DocSection }) {
   const selectedPath = useTreeStore((s) => s.selectedPath);
   const selectDocument = useTreeStore((s) => s.selectDocument);
   const loadDocument = useEditorStore((s) => s.loadDocument);
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId);
   const selected = selectedPath === node.path;
+
+  const [menuAnchor, setMenuAnchor] = useState<{ getBoundingClientRect: () => DOMRect } | null>(null);
+  const [showPromote, setShowPromote] = useState(false);
+
+  const canPromote = section === "current" || section === "decisions";
 
   const handleClick = () => {
     selectDocument(node.path);
     void loadDocument(node.path, DOC_TYPES[section] ?? "generic");
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!canPromote) return;
+    e.preventDefault();
+    const { clientX, clientY } = e;
+    setMenuAnchor({
+      getBoundingClientRect: () =>
+        DOMRect.fromRect({ x: clientX, y: clientY, width: 0, height: 0 }),
+    });
+  };
+
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className={cn(
-        "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11px] transition-colors",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        selected
-          ? "bg-primary/10 text-primary font-medium"
-          : "text-foreground/70 hover:bg-accent hover:text-foreground",
-        node.isDraft && "italic text-muted-foreground",
+    <>
+      <MenuRoot
+        open={menuAnchor !== null}
+        onOpenChange={(open) => { if (!open) setMenuAnchor(null); }}
+      >
+        <MenuContent anchor={menuAnchor ?? null} side="bottom" align="start">
+          <MenuItem
+            onClick={() => {
+              setMenuAnchor(null);
+              setShowPromote(true);
+            }}
+          >
+            <ArrowUpFromLine size={11} />
+            Promote to shared layer
+          </MenuItem>
+        </MenuContent>
+      </MenuRoot>
+
+      <button
+        type="button"
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        className={cn(
+          "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11px] transition-colors",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          selected
+            ? "bg-primary/10 text-primary font-medium"
+            : "text-foreground/70 hover:bg-accent hover:text-foreground",
+          node.isDraft && "italic text-muted-foreground",
+        )}
+      >
+        {section === "planned" && <StatusBadge status={node.status} />}
+        {node.hasValidationError && (
+          <AlertCircle size={10} className="text-destructive flex-shrink-0" />
+        )}
+        <span className="flex-1 truncate">{node.name}</span>
+      </button>
+
+      {showPromote && selectedProjectId && (
+        <PromoteModal
+          filePath={node.path}
+          section={section}
+          projectName={selectedProjectId}
+          onClose={() => setShowPromote(false)}
+        />
       )}
-    >
-      {section === "planned" && <StatusBadge status={node.status} />}
-      {node.hasValidationError && (
-        <AlertCircle size={10} className="text-destructive flex-shrink-0" />
-      )}
-      <span className="flex-1 truncate">{node.name}</span>
-    </button>
+    </>
   );
 }
 

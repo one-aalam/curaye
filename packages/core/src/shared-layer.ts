@@ -3,6 +3,7 @@ import path from 'path'
 import os from 'os'
 import { load as yamlLoad, dump as yamlDump } from 'js-yaml'
 import { SharedLayerError } from './errors.js'
+import { ProjectRegistry } from './registry.js'
 
 export const SHARED_DIR = path.join(os.homedir(), '.curaye', 'shared')
 export const CATEGORIES = ['decisions', 'patterns', 'design', 'agents', 'stack'] as const
@@ -19,11 +20,42 @@ export interface SharedDocument {
   raw: string
 }
 
+export interface PromoteInput {
+  sourcePath: string
+  sourceSection: string
+  category: SharedCategory
+  id: string
+  projectId: string
+  content: string
+}
+
+export interface PromoteResult {
+  sharedPath: string
+  docRef: string
+  isUpdate: boolean
+}
+
 export interface SharedNotification {
   docId: string
   category: SharedCategory
   adoptedBy: string[]
   updatedAt: string
+}
+
+function parseFrontmatter(raw: string): { fm: Record<string, unknown>; body: string } {
+  const stripped = raw.trimStart()
+  if (!stripped.startsWith('---')) return { fm: {}, body: raw }
+  const rest = stripped.slice(3)
+  const end = rest.indexOf('\n---')
+  if (end < 0) return { fm: {}, body: raw }
+  const yamlStr = rest.slice(0, end)
+  const body = rest.slice(end + 4)
+  const fm = (yamlLoad(yamlStr) as Record<string, unknown> | null) ?? {}
+  return { fm, body }
+}
+
+function buildFrontmatterString(fm: Record<string, unknown>, body: string): string {
+  return `---\n${yamlDump(fm, { lineWidth: -1 })}---${body}`
 }
 
 interface NotificationsFile {
@@ -171,6 +203,76 @@ export class SharedLayer {
       data.notifications[idx] = { ...notification, adoptedBy: remaining }
     }
     await writeNotificationsFile(data)
+  }
+
+  /**
+   * Promote a project document to the shared layer.
+   * Writes to ~/.curaye/shared/<category>/<id>.md, adds shared-layer frontmatter,
+   * records the originating project as an adopter, and notifies all other registered projects.
+   */
+  static async promote(input: PromoteInput): Promise<PromoteResult> {
+    const { sourcePath, sourceSection, category, id, projectId, content } = input
+
+    if (sourceSection === 'planned') {
+      throw new SharedLayerError('Only current/ and decisions/ documents can be promoted.')
+    }
+
+    const categoryDir = path.join(SHARED_DIR, category)
+    await fs.mkdir(categoryDir, { recursive: true })
+
+    const sharedPath = path.join(categoryDir, `${id}.md`)
+    const docRef = `shared/${category}/${id}`
+
+    // Check for existing promotion (idempotent update)
+    let isUpdate = false
+    let existingAdopted: string[] = []
+    try {
+      const existingRaw = await fs.readFile(sharedPath, 'utf8')
+      const { fm: existingFm } = parseFrontmatter(existingRaw)
+      const raw = existingFm['adopted_by']
+      existingAdopted = Array.isArray(raw)
+        ? (raw as unknown[]).filter((x): x is string => typeof x === 'string')
+        : []
+      isUpdate = true
+    } catch {
+      // New promotion — no existing file
+    }
+
+    // Build frontmatter: preserve original fields, add shared-layer metadata
+    const { fm, body } = parseFrontmatter(content)
+    const today = new Date().toISOString().slice(0, 10)
+    const adoptedBy = [...new Set([...existingAdopted, projectId])]
+
+    fm['source_project'] = projectId
+    fm['promoted'] = today
+    fm['adopted_by'] = adoptedBy
+
+    const sharedContent = buildFrontmatterString(fm, body)
+    const tmp = sharedPath + '.tmp'
+    await fs.writeFile(tmp, sharedContent, 'utf8')
+    await fs.rename(tmp, sharedPath)
+
+    // Notify all other registered projects
+    const allProjects = await ProjectRegistry.read()
+    const otherProjectIds = allProjects
+      .map((p) => p.id || p.name)
+      .filter((pid) => pid !== projectId)
+    if (otherProjectIds.length > 0) {
+      await SharedLayer.notifyUpdate(id, category, otherProjectIds)
+    }
+
+    return { sharedPath, docRef, isUpdate }
+  }
+
+  /** Add promoted_to: <docRef> to a source document's frontmatter. */
+  static async markPromotedSource(sourcePath: string, docRef: string): Promise<void> {
+    const raw = await fs.readFile(sourcePath, 'utf8')
+    const { fm, body } = parseFrontmatter(raw)
+    fm['promoted_to'] = docRef
+    const updated = buildFrontmatterString(fm, body)
+    const tmp = sourcePath + '.tmp'
+    await fs.writeFile(tmp, updated, 'utf8')
+    await fs.rename(tmp, sourcePath)
   }
 }
 

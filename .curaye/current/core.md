@@ -96,6 +96,23 @@ class SharedLayer {
   static async notifyUpdate(docId: string, category: SharedCategory, adoptedBy: string[]): Promise<void>
   static async listNotifications(): Promise<SharedNotification[]>
   static async markReviewed(docId: string, projectId: string): Promise<void>
+  static async promote(input: PromoteInput): Promise<PromoteResult>
+  static async markPromotedSource(sourcePath: string, docRef: string): Promise<void>
+}
+
+interface PromoteInput {
+  sourcePath:    string          // absolute path to the source document
+  sourceSection: string          // detected folder name ('current', 'decisions', etc.)
+  category:      SharedCategory  // destination category in shared layer
+  id:            string          // id for the shared document (defaults to source filename)
+  projectId:     string          // originating project's id or name
+  content:       string          // document content to write (may be AI-rewritten)
+}
+
+interface PromoteResult {
+  sharedPath: string             // absolute path of the written shared document
+  docRef:     string             // e.g. 'shared/decisions/why-sqlite'
+  isUpdate:   boolean            // true when the shared document already existed
 }
 
 interface SharedDocument {
@@ -115,6 +132,8 @@ interface SharedNotification {
 ```
 
 Review snapshots (diff baselines) are stored in `~/.curaye/shared-reviews/<projectId>/<docId>.md`. Notifications are stored in `~/.curaye/notifications.yaml`.
+
+`promote()` elevates a project document to the shared layer: it preserves original frontmatter, injects `source_project`, `promoted`, and `adopted_by` fields, writes the result atomically to `~/.curaye/shared/<category>/<id>.md`, and fires `notifyUpdate()` for all other registered projects. Running `promote()` on a document that already has a shared counterpart updates it in place (`isUpdate: true`) — never creates a duplicate. `planned/` documents are rejected with `SharedLayerError`. `markPromotedSource()` adds `promoted_to: <docRef>` to the source document's frontmatter atomically.
 
 ## Agent file tracking
 
