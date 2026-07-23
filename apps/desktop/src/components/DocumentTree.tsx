@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ChevronRight, ChevronDown, Plus, AlertCircle, Package } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, AlertCircle, Package, FileText, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTreeStore, type TreeNode, type DocSection, type ReleaseSummary } from "@/stores/treeStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "@/stores/projectStore";
 import { useViewStore } from "@/stores/viewStore";
+import { useBriefStore } from "@/stores/briefStore";
 
 const STATUS_DOT: Record<string, string> = {
   draft: "bg-zinc-400",
@@ -259,6 +260,106 @@ function ShippedReleasesGroup({ releases }: { releases: ReleaseSummary[] }) {
   );
 }
 
+// ── Tree panel header ─────────────────────────────────────────────────────────
+
+function TreePanelHeader() {
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId);
+  const { projects } = useProjectStore();
+  const { generateBrief, isDormant } = useBriefStore();
+  const project = projects.find((p) => p.name === selectedProjectId);
+
+  const handleBrief = async () => {
+    if (!project) return;
+    // Get AI config from backend
+    let aiConfig: unknown | null = null;
+    try {
+      aiConfig = await invoke("get_ai_config");
+    } catch {
+      aiConfig = null;
+    }
+    await generateBrief(project.curaye_path, aiConfig);
+  };
+
+  if (!project) return null;
+
+  return (
+    <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/30 flex-shrink-0">
+      <span className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider truncate flex-1 mr-1">
+        {project.name}
+      </span>
+      <button
+        type="button"
+        onClick={() => void handleBrief()}
+        className={cn(
+          "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors flex-shrink-0",
+          isDormant
+            ? "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
+            : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-accent",
+        )}
+        title="Generate re-entry brief"
+      >
+        <FileText size={10} />
+        Brief
+      </button>
+    </div>
+  );
+}
+
+// ── Re-entry prompt banner ────────────────────────────────────────────────────
+
+function ReentryBanner() {
+  const { isDormant, lastOpenedDate, generateBrief } = useBriefStore();
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId);
+  const { projects } = useProjectStore();
+  const [dismissed, setDismissed] = useState(false);
+
+  const project = projects.find((p) => p.name === selectedProjectId);
+
+  if (!isDormant || dismissed || !project) return null;
+
+  const daysAgo = lastOpenedDate
+    ? Math.floor((Date.now() - new Date(lastOpenedDate).getTime()) / 86_400_000)
+    : null;
+
+  const handleGenerate = async () => {
+    setDismissed(true);
+    let aiConfig: unknown | null = null;
+    try {
+      aiConfig = await invoke("get_ai_config");
+    } catch {
+      aiConfig = null;
+    }
+    await generateBrief(project.curaye_path, aiConfig);
+  };
+
+  return (
+    <div className="mx-2 mt-1.5 mb-1 rounded border border-amber-500/20 bg-amber-500/5 p-2">
+      <div className="flex items-start gap-1.5">
+        <Sparkles size={11} className="text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-amber-300/80 leading-snug">
+            {daysAgo !== null ? `Not opened in ${daysAgo} days.` : "Dormant project."}
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleGenerate()}
+            className="mt-1 text-[10px] text-amber-400 hover:text-amber-300 underline underline-offset-2 transition-colors"
+          >
+            Generate re-entry brief
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="text-[9px] text-muted-foreground/40 hover:text-muted-foreground/60 flex-shrink-0"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main DocumentTree ─────────────────────────────────────────────────────────
 
 export function DocumentTree() {
@@ -266,16 +367,21 @@ export function DocumentTree() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-        Loading…
+      <div className="flex flex-col h-full">
+        <TreePanelHeader />
+        <div className="flex items-center justify-center flex-1 text-xs text-muted-foreground">
+          Loading…
+        </div>
       </div>
     );
   }
 
   if (!tree) {
     return (
-      <div className="flex items-center justify-center h-full text-xs text-muted-foreground px-4 text-center">
-        Select a project to browse its documents.
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-center flex-1 text-xs text-muted-foreground px-4 text-center">
+          Select a project to browse its documents.
+        </div>
       </div>
     );
   }
@@ -283,45 +389,49 @@ export function DocumentTree() {
   const sections: DocSection[] = ["planned", "current", "shipped", "decisions", "root"];
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto py-1">
-      {sections.map((section) => {
-        const nodes = tree[section] ?? [];
-        const expanded = expandedSections.has(section);
-        const drafts = nodes.filter((n) => n.isDraft);
-        const nonDrafts = nodes.filter((n) => !n.isDraft);
+    <div className="flex flex-col h-full">
+      <TreePanelHeader />
+      <ReentryBanner />
+      <div className="flex-1 overflow-y-auto py-1">
+        {sections.map((section) => {
+          const nodes = tree[section] ?? [];
+          const expanded = expandedSections.has(section);
+          const drafts = nodes.filter((n) => n.isDraft);
+          const nonDrafts = nodes.filter((n) => !n.isDraft);
 
-        return (
-          <div key={section} className="mb-1">
-            <SectionHeader
-              section={section}
-              nodes={nodes}
-              expanded={expanded}
-              onToggle={() => toggleSection(section)}
-            />
-            {expanded && (
-              <div className="px-1.5 pb-1">
-                {nonDrafts.map((node) => (
-                  <TreeItem key={node.path} node={node} section={section} />
-                ))}
-                {drafts.length > 0 && (
-                  <div className="mt-1">
-                    <p className="px-2 text-[9px] uppercase tracking-wider text-muted-foreground/50 mb-0.5">
-                      Drafts
-                    </p>
-                    {drafts.map((node) => (
-                      <TreeItem key={node.path} node={node} section={section} />
-                    ))}
-                  </div>
-                )}
-                {nodes.length === 0 && (
-                  <p className="px-2 py-1 text-[10px] text-muted-foreground/40">Empty</p>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <ReleasesSection releases={tree.releases ?? []} />
+          return (
+            <div key={section} className="mb-1">
+              <SectionHeader
+                section={section}
+                nodes={nodes}
+                expanded={expanded}
+                onToggle={() => toggleSection(section)}
+              />
+              {expanded && (
+                <div className="px-1.5 pb-1">
+                  {nonDrafts.map((node) => (
+                    <TreeItem key={node.path} node={node} section={section} />
+                  ))}
+                  {drafts.length > 0 && (
+                    <div className="mt-1">
+                      <p className="px-2 text-[9px] uppercase tracking-wider text-muted-foreground/50 mb-0.5">
+                        Drafts
+                      </p>
+                      {drafts.map((node) => (
+                        <TreeItem key={node.path} node={node} section={section} />
+                      ))}
+                    </div>
+                  )}
+                  {nodes.length === 0 && (
+                    <p className="px-2 py-1 text-[10px] text-muted-foreground/40">Empty</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <ReleasesSection releases={tree.releases ?? []} />
+      </div>
     </div>
   );
 }

@@ -2,10 +2,12 @@ import { useEffect, useCallback } from "react";
 import { useConfigStore } from "@/stores/configStore";
 import { usePaletteStore } from "@/stores/paletteStore";
 import { useViewStore } from "@/stores/viewStore";
+import { useBriefStore } from "@/stores/briefStore";
 import { ThreePanelLayout } from "@/components/ResizablePanels";
 import { ProjectsSidebar } from "@/components/ProjectsSidebar";
 import { DocumentTree } from "@/components/DocumentTree";
 import { DocumentEditor } from "@/components/DocumentEditor";
+import { BriefView } from "@/components/BriefView";
 import { AIPalette } from "@/components/AIPalette";
 import { BacklogView } from "@/components/BacklogView";
 import { ReleaseView } from "@/components/ReleaseView";
@@ -16,6 +18,7 @@ export function App() {
   const openPalette = usePaletteStore((s) => s.openPalette);
   const isPaletteOpen = usePaletteStore((s) => s.open);
   const view = useViewStore((s) => s.view);
+  const briefActive = useBriefStore((s) => s.active);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -65,7 +68,7 @@ export function App() {
       <ThreePanelLayout
         left={<ProjectsSidebar />}
         middle={<DocumentTree />}
-        right={<DocumentEditor />}
+        right={briefActive ? <BriefView /> : <DocumentEditor />}
       />
       <AIPalette />
       {view === "backlog" && <BacklogView />}

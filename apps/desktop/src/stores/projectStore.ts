@@ -36,6 +36,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   selectProject: (name: string) => {
     set({ selectedProjectId: name });
+    const { projects } = get();
+    const project = projects.find((p) => p.name === name);
+    if (project) {
+      // Lazy import to avoid circular deps — briefStore imports nothing from projectStore
+      void import("./briefStore").then(({ useBriefStore }) => {
+        void useBriefStore.getState().loadLastOpened(project.curaye_path);
+        void useBriefStore.getState().recordOpened(project.curaye_path);
+      });
+    }
   },
 
   refreshSyncStatus: async () => {

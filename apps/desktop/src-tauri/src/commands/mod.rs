@@ -1522,6 +1522,225 @@ pub async fn sync_project(_curaye_path: String) -> Result<(), String> {
     Ok(())
 }
 
+// ── Re-entry brief ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlannedSpecSummary {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub effort: String,
+    pub impact: Option<String>,
+    pub updated: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrentDocSummary {
+    pub id: String,
+    pub title: String,
+    pub domain: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionSummary {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BriefContext {
+    pub project_name: String,
+    pub last_activity_date: String,
+    pub current_docs: Vec<CurrentDocSummary>,
+    pub planned_specs: Vec<PlannedSpecSummary>,
+    pub decisions: Vec<DecisionSummary>,
+    pub prd_content: Option<String>,
+    pub stack_content: Option<String>,
+}
+
+fn parse_body(content: &str) -> String {
+    let stripped = content.trim_start_matches('\u{feff}');
+    if !stripped.starts_with("---") {
+        return content.to_string();
+    }
+    let rest = &stripped[3..];
+    if let Some(end) = rest.find("\n---") {
+        rest[end + 4..].trim_start_matches('\n').to_string()
+    } else {
+        content.to_string()
+    }
+}
+
+async fn read_doc_files(dir: &PathBuf) -> Vec<(BTreeMap<String, serde_yaml::Value>, String, String)> {
+    let mut result = Vec::new();
+    let Ok(mut entries) = tokio::fs::read_dir(dir).await else {
+        return result;
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        // skip drafts
+        if name.starts_with('_') {
+            continue;
+        }
+        let Ok(content) = tokio::fs::read_to_string(&path).await else {
+            continue;
+        };
+        let fm = parse_frontmatter_quick(&content);
+        let body = parse_body(&content);
+        result.push((fm, body, name));
+    }
+    result.sort_by(|a, b| a.2.cmp(&b.2));
+    result
+}
+
+fn latest_date(dates: &[String]) -> String {
+    let mut sorted = dates.to_vec();
+    sorted.sort();
+    sorted.last().cloned().unwrap_or_else(|| "unknown".to_string())
+}
+
+#[command]
+pub async fn generate_brief_context(curaye_path: String) -> Result<BriefContext, String> {
+    let base = PathBuf::from(&curaye_path);
+    let project_name = base.parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("Project")
+        .to_string();
+
+    // Read root docs
+    let prd_content = tokio::fs::read_to_string(base.join("prd.md")).await.ok();
+    let stack_content = tokio::fs::read_to_string(base.join("stack.md")).await.ok();
+
+    // current/
+    let current_raw = read_doc_files(&base.join("current")).await;
+    let current_docs: Vec<CurrentDocSummary> = current_raw.iter().map(|(fm, body, _)| {
+        CurrentDocSummary {
+            id: fm.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            title: fm.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            domain: fm.get("domain").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            body: body.clone(),
+        }
+    }).collect();
+
+    // planned/
+    let planned_raw = read_doc_files(&base.join("planned")).await;
+    let mut all_dates: Vec<String> = Vec::new();
+    let planned_specs: Vec<PlannedSpecSummary> = planned_raw.iter().filter_map(|(fm, body, _)| {
+        let status = fm.get("status").and_then(|v| v.as_str()).unwrap_or("draft").to_string();
+        if status == "done" || status == "shelved" {
+            return None;
+        }
+        let id = fm.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let title = fm.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let effort = fm.get("effort").and_then(|v| v.as_str()).unwrap_or("m").to_string();
+        let impact = fm.get("impact").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let updated = fm.get("updated").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if !updated.is_empty() {
+            all_dates.push(updated.clone());
+        }
+        Some(PlannedSpecSummary { id, title, status, effort, impact, updated, body: body.clone() })
+    }).collect();
+
+    // decisions/
+    let decisions_raw = read_doc_files(&base.join("decisions")).await;
+    let decisions: Vec<DecisionSummary> = decisions_raw.iter().map(|(fm, body, _)| {
+        DecisionSummary {
+            id: fm.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            title: fm.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            status: fm.get("status").and_then(|v| v.as_str()).unwrap_or("active").to_string(),
+            body: body.clone(),
+        }
+    }).collect();
+
+    let last_activity_date = latest_date(&all_dates);
+
+    Ok(BriefContext {
+        project_name,
+        last_activity_date,
+        current_docs,
+        planned_specs,
+        decisions,
+        prd_content,
+        stack_content,
+    })
+}
+
+#[command]
+pub async fn save_brief(curaye_path: String, content: String, date: String) -> Result<String, String> {
+    let briefs_dir = PathBuf::from(&curaye_path).join("briefs");
+    tokio::fs::create_dir_all(&briefs_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    let dest = briefs_dir.join(format!("{}.md", date));
+    write_atomic(&dest, content.as_bytes()).await?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+// ── Desktop state (last_opened tracking) ─────────────────────────────────────
+
+fn desktop_state_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("desktop-state.json")
+}
+
+async fn read_desktop_state() -> serde_json::Map<String, serde_json::Value> {
+    let path = desktop_state_path();
+    if !path.exists() {
+        return serde_json::Map::new();
+    }
+    let Ok(content) = tokio::fs::read_to_string(&path).await else {
+        return serde_json::Map::new();
+    };
+    serde_json::from_str::<serde_json::Value>(&content)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default()
+}
+
+async fn write_desktop_state(state: &serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
+    let path = desktop_state_path();
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+    }
+    let content = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
+    write_atomic(&path, content.as_bytes()).await
+}
+
+#[command]
+pub async fn get_last_opened(curaye_path: String) -> Result<Option<String>, String> {
+    let state = read_desktop_state().await;
+    let last_opened = state.get("last_opened")
+        .and_then(|v| v.as_object())
+        .and_then(|m| m.get(&curaye_path))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    Ok(last_opened)
+}
+
+#[command]
+pub async fn set_last_opened(curaye_path: String, date: String) -> Result<(), String> {
+    let mut state = read_desktop_state().await;
+    let last_opened = state
+        .entry("last_opened")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if let Some(obj) = last_opened.as_object_mut() {
+        obj.insert(curaye_path, serde_json::Value::String(date));
+    }
+    write_desktop_state(&state).await
+}
+
 // ── Atomic write ──────────────────────────────────────────────────────────────
 
 async fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {

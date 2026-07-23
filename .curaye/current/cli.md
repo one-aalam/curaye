@@ -65,6 +65,12 @@ Tracks `CLAUDE.md`, `AGENTS.md`, and `*AGENTS*.md` files across registered proje
 | `curaye agents diff <date> [--project <id>]` | Shows all log entries recorded on `<date>`, including structured metadata and diff summary body. |
 | `curaye agents detect [--project <id>]` | Detects agent steering files in the project directory without writing any changes (dry-run). |
 
+## Re-entry brief
+
+| Command | Description |
+|---|---|
+| `curaye brief [--project <id>] [--no-ai] [--save]` | Generates a structured 6-section re-entry brief (Current State, What Was Planned, Where You Left Off, Decisions to Revisit, Suggested First Step, Vision Check) from the project's `.curaye/` contents. With AI configured, streams prose to stdout; `--no-ai` forces deterministic output from structured data alone. `--save` writes the output to `.curaye/briefs/YYYY-MM-DD.md` (not tracked by the protocol scanner). Falls back to deterministic output automatically when no AI provider is configured. |
+
 ## Search
 
 | Command | Description |
@@ -79,7 +85,6 @@ All AI commands require a configured provider.
 |---|---|
 | `curaye ai status` | Reports which provider is configured and whether it is reachable. |
 | `curaye ai draft <title> [--project <id>]` | Streams a drafted planned spec to stdout; prompts to save. |
-| `curaye ai brief [--project <id>]` | Streams a re-entry brief from `prd.md`, `stack.md`, `current/`, `planned/`, and `decisions/`. |
 | `curaye ai update-current <spec-id> [--project <id>]` | Generates a `current/` update proposal from a shipped spec and opens in `$EDITOR`. |
 
 ## Shared layer

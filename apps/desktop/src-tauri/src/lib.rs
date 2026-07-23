@@ -2,11 +2,12 @@ mod commands;
 
 use tauri::Manager;
 use commands::{
-    assign_spec_to_release, cancel_ai_stream, create_document, create_release, get_ai_config,
-    link_project, parse_raw, pick_directory, read_document, read_registry, reveal_in_finder,
-    scan_backlog, scan_project, scan_release_specs, scan_releases, serialize_document, ship_release,
-    start_ai_stream, sync_project, unlink_project, update_release_status, update_spec_status,
-    write_ai_config, write_document, write_registry, AiStreamState,
+    assign_spec_to_release, cancel_ai_stream, create_document, create_release, generate_brief_context,
+    get_ai_config, get_last_opened, link_project, parse_raw, pick_directory, read_document,
+    read_registry, reveal_in_finder, save_brief, scan_backlog, scan_project, scan_release_specs,
+    scan_releases, serialize_document, set_last_opened, ship_release, start_ai_stream, sync_project,
+    unlink_project, update_release_status, update_spec_status, write_ai_config, write_document,
+    write_registry, AiStreamState,
 };
 
 pub fn run() {
@@ -39,6 +40,10 @@ pub fn run() {
             write_ai_config,
             start_ai_stream,
             cancel_ai_stream,
+            generate_brief_context,
+            save_brief,
+            get_last_opened,
+            set_last_opened,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
