@@ -2,7 +2,7 @@
 id: core
 title: "@curaye/core — Project Scanner & Registry"
 domain: core
-updated: 2026-07-21
+updated: 2026-07-23
 ---
 
 # @curaye/core — Project Scanner & Registry
@@ -17,7 +17,7 @@ updated: 2026-07-21
 async function scanProject(curiyePath: string): Promise<ProjectIndex>
 ```
 
-Recursively scans a `.curaye/` folder. Returns a `ProjectIndex` with typed arrays for `planned`, `current`, `shipped`, `decisions`, and `drafts`, plus a `warnings` array for non-fatal issues (missing root docs, unreadable files). Documents are sorted by numeric prefix, then alphabetically. Throws `CurayeNotFoundError` only if `curiyePath` does not exist. Never throws for missing documents or validation failures.
+Recursively scans a `.curaye/` folder. Returns a `ProjectIndex` with typed arrays for `planned`, `current`, `shipped`, `decisions`, `releases`, and `drafts`, plus a `warnings` array for non-fatal issues (missing root docs, unreadable files). Documents are sorted by numeric prefix, then alphabetically. Throws `CurayeNotFoundError` only if `curiyePath` does not exist. Never throws for missing documents or validation failures.
 
 ```ts
 interface ProjectIndex {
@@ -32,10 +32,13 @@ interface ProjectIndex {
   current:   ParsedDocument<CurrentFrontmatter>[]
   shipped:   ParsedDocument<ShippedFrontmatter>[]
   decisions: ParsedDocument<DecisionFrontmatter>[]
+  releases:  ParsedDocument<ReleaseFrontmatter>[]
   drafts:    ParsedDocument[]
   warnings:  ScanWarning[]
 }
 ```
+
+A missing `.curaye/releases/` folder produces an empty array and a non-fatal warning — never an error.
 
 ## `readDocument` / `writeDocument`
 
@@ -162,6 +165,31 @@ interface AgentChange {
 ```
 
 Log files are named `YYYY-MM-DD-{basename}.md` — one file per (date, agent file) pair. Frontmatter holds structured metadata; body holds the optional AI-generated summary.
+
+## `ReleaseManager`
+
+Manages `.curaye/releases/` documents. All writes are atomic (`.tmp` → rename).
+
+```ts
+class ReleaseManager {
+  static async list(curiyePath: string): Promise<ReleaseSummary[]>
+  static async create(curiyePath: string, name: string, today: string, target?: string): Promise<ReleaseSummary>
+  static async assign(specPath: string, releaseId: string, today: string): Promise<void>
+  static async markReleaseStatus(releasePath: string, status: string, today: string): Promise<void>
+}
+
+interface ReleaseSummary {
+  id:     string
+  title:  string
+  status: string          // 'planning' | 'active' | 'shipped'
+  target: string | null   // ISO date or null
+  path:   string
+  total:  number          // non-shelved planned specs assigned to this release
+  done:   number          // planned specs with status: 'done' in this release
+}
+```
+
+`create()` converts the `name` argument to a slug (`v0.3.0` → `v0-3-0`) for the filename. The `list()` method cross-references `planned/` to compute `total` and `done` counts per release.
 
 ## Error types
 

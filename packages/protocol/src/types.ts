@@ -1,4 +1,4 @@
-export type DocumentType = 'planned' | 'current' | 'shipped' | 'decisions' | 'root'
+export type DocumentType = 'planned' | 'current' | 'shipped' | 'decisions' | 'root' | 'releases'
 
 export interface ValidationIssue {
   field: string

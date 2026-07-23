@@ -2,10 +2,11 @@ mod commands;
 
 use tauri::Manager;
 use commands::{
-    cancel_ai_stream, create_document, get_ai_config, link_project, parse_raw, pick_directory,
-    read_document, read_registry, reveal_in_finder, scan_project, serialize_document,
-    start_ai_stream, sync_project, unlink_project, write_ai_config, write_document, write_registry,
-    AiStreamState,
+    assign_spec_to_release, cancel_ai_stream, create_document, create_release, get_ai_config,
+    link_project, parse_raw, pick_directory, read_document, read_registry, reveal_in_finder,
+    scan_backlog, scan_project, scan_release_specs, scan_releases, serialize_document, ship_release,
+    start_ai_stream, sync_project, unlink_project, update_release_status, update_spec_status,
+    write_ai_config, write_document, write_registry, AiStreamState,
 };
 
 pub fn run() {
@@ -26,6 +27,14 @@ pub fn run() {
             create_document,
             reveal_in_finder,
             sync_project,
+            scan_backlog,
+            update_spec_status,
+            scan_releases,
+            scan_release_specs,
+            create_release,
+            assign_spec_to_release,
+            update_release_status,
+            ship_release,
             get_ai_config,
             write_ai_config,
             start_ai_stream,

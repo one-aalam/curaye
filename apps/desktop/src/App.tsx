@@ -1,17 +1,21 @@
 import { useEffect, useCallback } from "react";
 import { useConfigStore } from "@/stores/configStore";
 import { usePaletteStore } from "@/stores/paletteStore";
+import { useViewStore } from "@/stores/viewStore";
 import { ThreePanelLayout } from "@/components/ResizablePanels";
 import { ProjectsSidebar } from "@/components/ProjectsSidebar";
 import { DocumentTree } from "@/components/DocumentTree";
 import { DocumentEditor } from "@/components/DocumentEditor";
 import { AIPalette } from "@/components/AIPalette";
+import { BacklogView } from "@/components/BacklogView";
+import { ReleaseView } from "@/components/ReleaseView";
 
 export function App() {
   const theme = useConfigStore((s) => s.theme);
   const uiFont = useConfigStore((s) => s.uiFont);
   const openPalette = usePaletteStore((s) => s.openPalette);
   const isPaletteOpen = usePaletteStore((s) => s.open);
+  const view = useViewStore((s) => s.view);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -64,6 +68,8 @@ export function App() {
         right={<DocumentEditor />}
       />
       <AIPalette />
+      {view === "backlog" && <BacklogView />}
+      {view === "releases" && <ReleaseView />}
     </div>
   );
 }

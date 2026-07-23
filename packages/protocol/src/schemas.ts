@@ -54,8 +54,20 @@ export const RootDocFrontmatterSchema = z
   })
   .passthrough()
 
+export const ReleaseFrontmatterSchema = z
+  .object({
+    id: z.string().optional(),
+    title: z.string(),
+    status: z.enum(['planning', 'active', 'shipped']),
+    target: z.string().regex(dateRegex).optional(),
+    created: z.string().regex(dateRegex),
+    updated: z.string().regex(dateRegex),
+  })
+  .passthrough()
+
 export type PlannedFrontmatter = z.infer<typeof PlannedFrontmatterSchema>
 export type CurrentFrontmatter = z.infer<typeof CurrentFrontmatterSchema>
 export type ShippedFrontmatter = z.infer<typeof ShippedFrontmatterSchema>
 export type DecisionFrontmatter = z.infer<typeof DecisionFrontmatterSchema>
 export type RootDocFrontmatter = z.infer<typeof RootDocFrontmatterSchema>
+export type ReleaseFrontmatter = z.infer<typeof ReleaseFrontmatterSchema>

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, RefreshCw, Plus } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, LayoutList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type RegistryProject } from "@/stores/projectStore";
 import { useTreeStore } from "@/stores/treeStore";
+import { useViewStore } from "@/stores/viewStore";
 import { MenuRoot, MenuContent, MenuItem, MenuSeparator } from "@/components/ui/menu";
 import { SettingsTrigger } from "@/components/SettingsDrawer";
 
@@ -88,6 +89,8 @@ function ProjectItem({ project, selected }: { project: RegistryProject; selected
 
 export function ProjectsSidebar() {
   const { projects, loading, loadProjects, selectedProjectId, refreshSyncStatus } = useProjectStore();
+  const setView = useViewStore((s) => s.setView);
+  const view = useViewStore((s) => s.view);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -145,19 +148,34 @@ export function ProjectsSidebar() {
         ))}
       </div>
 
-      <div className="border-t border-sidebar-border p-1.5 flex items-center gap-1">
+      <div className="border-t border-sidebar-border p-1.5 flex flex-col gap-1">
         <button
           type="button"
-          onClick={() => void handleAddProject()}
+          onClick={() => setView(view === "backlog" ? "main" : "backlog")}
           className={cn(
-            "flex flex-1 items-center gap-2 rounded px-2.5 py-1.5 text-xs",
-            "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors",
+            "flex items-center gap-2 rounded px-2.5 py-1.5 text-xs transition-colors",
+            view === "backlog"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+              : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
           )}
         >
-          <Plus size={12} />
-          Add project
+          <LayoutList size={12} />
+          Backlog
         </button>
-        <SettingsTrigger />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void handleAddProject()}
+            className={cn(
+              "flex flex-1 items-center gap-2 rounded px-2.5 py-1.5 text-xs",
+              "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors",
+            )}
+          >
+            <Plus size={12} />
+            Add project
+          </button>
+          <SettingsTrigger />
+        </div>
       </div>
     </aside>
   );

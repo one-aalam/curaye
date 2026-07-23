@@ -5,6 +5,7 @@ export {
   ShippedFrontmatterSchema,
   DecisionFrontmatterSchema,
   RootDocFrontmatterSchema,
+  ReleaseFrontmatterSchema,
 } from './schemas.js'
 
 // Inferred types
@@ -14,6 +15,7 @@ export type {
   ShippedFrontmatter,
   DecisionFrontmatter,
   RootDocFrontmatter,
+  ReleaseFrontmatter,
 } from './schemas.js'
 
 // Core types

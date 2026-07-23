@@ -37,6 +37,15 @@ updated: 2026-07-23
 | `curaye ship <spec-id> [--project <id>] [--release <release>]` | Creates `shipped/` document, prompts to update `current/`, removes planned spec. |
 | `curaye backlog [--status draft\|ready] [--sort impact\|desire\|effort] [--project <id>]` | Cross-project backlog: aggregates `planned/` specs with `status: draft \| ready` from all registered projects (or one). `--sort effort` orders xs → xl; `--sort impact` and `--sort desire` order high → low. `--json` for structured output. |
 
+## Release management
+
+| Command | Description |
+|---|---|
+| `curaye release new <name> [--target YYYY-MM-DD] [--project <id>]` | Creates `.curaye/releases/<slugified-name>.md` with `status: planning` frontmatter. `v0.3.0` becomes `v0-3-0.md`. |
+| `curaye release list [--project <id>]` | Lists all releases for a project (or all registered projects) with id, title, status, target date, and `done/total` spec count. |
+| `curaye release assign <spec-id> <release-id> [--project <id>]` | Sets the `release` field in the spec's frontmatter. Replaces any existing assignment — a spec can only belong to one release. |
+| `curaye release board <release-id> [--project <id>]` | Prints an ASCII kanban board to stdout with four columns (Draft / Ready / Building / Done), showing all non-shelved specs assigned to the release. |
+
 ## Sync
 
 | Command | Description |

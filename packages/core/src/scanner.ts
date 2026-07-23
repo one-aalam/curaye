@@ -12,6 +12,7 @@ import type {
   ShippedFrontmatter,
   DecisionFrontmatter,
   RootDocFrontmatter,
+  ReleaseFrontmatter,
 } from '@curaye/protocol'
 import { CurayeNotFoundError } from './errors.js'
 
@@ -32,6 +33,7 @@ export interface ProjectIndex {
   current: ParsedDocument<CurrentFrontmatter>[]
   shipped: ParsedDocument<ShippedFrontmatter>[]
   decisions: ParsedDocument<DecisionFrontmatter>[]
+  releases: ParsedDocument<ReleaseFrontmatter>[]
   drafts: ParsedDocument[]
   warnings: ScanWarning[]
 }
@@ -52,7 +54,7 @@ async function readRootDoc(
 
 async function scanFolder<T>(
   folderPath: string,
-  type: 'planned' | 'current' | 'shipped' | 'decisions',
+  type: 'planned' | 'current' | 'shipped' | 'decisions' | 'releases',
   drafts: ParsedDocument[],
   warnings: ScanWarning[],
 ): Promise<ParsedDocument<T>[]> {
@@ -103,7 +105,7 @@ export async function scanProject(curiyePath: string): Promise<ProjectIndex> {
   const warnings: ScanWarning[] = []
   const drafts: ParsedDocument[] = []
 
-  const [prd, stack, product, planned, current, shipped, decisions] = await Promise.all([
+  const [prd, stack, product, planned, current, shipped, decisions, releases] = await Promise.all([
     readRootDoc(path.join(curiyePath, 'prd.md'), warnings),
     readRootDoc(path.join(curiyePath, 'stack.md'), warnings),
     readRootDoc(path.join(curiyePath, 'product.md'), warnings),
@@ -111,6 +113,7 @@ export async function scanProject(curiyePath: string): Promise<ProjectIndex> {
     scanFolder<CurrentFrontmatter>(path.join(curiyePath, 'current'), 'current', drafts, warnings),
     scanFolder<ShippedFrontmatter>(path.join(curiyePath, 'shipped'), 'shipped', drafts, warnings),
     scanFolder<DecisionFrontmatter>(path.join(curiyePath, 'decisions'), 'decisions', drafts, warnings),
+    scanFolder<ReleaseFrontmatter>(path.join(curiyePath, 'releases'), 'releases', drafts, warnings),
   ])
 
   const projectId = path.basename(path.dirname(curiyePath))
@@ -123,6 +126,7 @@ export async function scanProject(curiyePath: string): Promise<ProjectIndex> {
     current,
     shipped,
     decisions,
+    releases,
     drafts,
     warnings,
   }

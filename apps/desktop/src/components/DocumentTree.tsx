@@ -1,9 +1,11 @@
-import { ChevronRight, ChevronDown, Plus, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { ChevronRight, ChevronDown, Plus, AlertCircle, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTreeStore, type TreeNode, type DocSection } from "@/stores/treeStore";
+import { useTreeStore, type TreeNode, type DocSection, type ReleaseSummary } from "@/stores/treeStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "@/stores/projectStore";
+import { useViewStore } from "@/stores/viewStore";
 
 const STATUS_DOT: Record<string, string> = {
   draft: "bg-zinc-400",
@@ -134,6 +136,131 @@ function SectionHeader({
   );
 }
 
+// ── Release progress bar ──────────────────────────────────────────────────────
+
+function ReleaseProgressBar({ done, total }: { done: number; total: number }) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+      <div className="h-1 flex-1 rounded-full bg-card/40 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-green-500/70 transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">
+        {done}/{total}
+      </span>
+    </div>
+  );
+}
+
+// ── Release item ──────────────────────────────────────────────────────────────
+
+const RELEASE_STATUS_DOTS: Record<string, string> = {
+  planning: "bg-zinc-400",
+  active: "bg-blue-400",
+  shipped: "bg-green-500",
+};
+
+function ReleaseItem({ release }: { release: ReleaseSummary }) {
+  const openRelease = useViewStore((s) => s.openRelease);
+  const currentReleaseId = useViewStore((s) => s.currentReleaseId);
+  const view = useViewStore((s) => s.view);
+  const isActive = view === "releases" && currentReleaseId === release.id;
+  const dot = RELEASE_STATUS_DOTS[release.status] ?? "bg-zinc-400";
+
+  return (
+    <button
+      type="button"
+      onClick={() => openRelease(release.id)}
+      className={cn(
+        "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11px] transition-colors",
+        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        isActive
+          ? "bg-primary/10 text-primary font-medium"
+          : "text-foreground/70 hover:bg-accent hover:text-foreground",
+        release.status === "shipped" && !isActive && "opacity-50",
+      )}
+    >
+      <span className={cn("inline-block h-1.5 w-1.5 rounded-full flex-shrink-0", dot)} />
+      <span className="truncate flex-shrink-0 max-w-[80px]">{release.title}</span>
+      {release.total > 0 && (
+        <ReleaseProgressBar done={release.done} total={release.total} />
+      )}
+    </button>
+  );
+}
+
+// ── Releases section ──────────────────────────────────────────────────────────
+
+function ReleasesSection({ releases }: { releases: ReleaseSummary[] }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const activeReleases = releases.filter((r) => r.status !== "shipped");
+  const shippedReleases = releases.filter((r) => r.status === "shipped");
+
+  const visibleReleases = expanded
+    ? activeReleases
+    : [];
+
+  return (
+    <div className="mb-1">
+      <div className="flex items-center group">
+        <button
+          type="button"
+          onClick={() => setExpanded((p) => !p)}
+          className={cn(
+            "flex flex-1 items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider",
+            "text-muted-foreground hover:text-foreground transition-colors",
+          )}
+        >
+          {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          <Package size={9} className="flex-shrink-0" />
+          releases/
+          {releases.length > 0 && (
+            <span className="ml-auto text-[9px] opacity-50">{releases.length}</span>
+          )}
+        </button>
+      </div>
+      {expanded && (
+        <div className="px-1.5 pb-1">
+          {visibleReleases.map((r) => (
+            <ReleaseItem key={r.id} release={r} />
+          ))}
+          {shippedReleases.length > 0 && (
+            <ShippedReleasesGroup releases={shippedReleases} />
+          )}
+          {releases.length === 0 && (
+            <p className="px-2 py-1 text-[10px] text-muted-foreground/40">
+              No releases yet. Run <code className="font-mono">curaye release new</code>
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShippedReleasesGroup({ releases }: { releases: ReleaseSummary[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-0.5">
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="flex items-center gap-1 px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+      >
+        {open ? <ChevronDown size={8} /> : <ChevronRight size={8} />}
+        Shipped ({releases.length})
+      </button>
+      {open && releases.map((r) => <ReleaseItem key={r.id} release={r} />)}
+    </div>
+  );
+}
+
+// ── Main DocumentTree ─────────────────────────────────────────────────────────
+
 export function DocumentTree() {
   const { tree, expandedSections, toggleSection, loading } = useTreeStore();
 
@@ -194,6 +321,7 @@ export function DocumentTree() {
           </div>
         );
       })}
+      <ReleasesSection releases={tree.releases ?? []} />
     </div>
   );
 }

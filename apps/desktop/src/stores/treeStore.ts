@@ -12,12 +12,23 @@ export interface TreeNode {
   hasValidationError: boolean;
 }
 
+export interface ReleaseSummary {
+  id: string;
+  title: string;
+  status: string;
+  target: string | null;
+  path: string;
+  total: number;
+  done: number;
+}
+
 export interface ProjectTree {
   planned: TreeNode[];
   current: TreeNode[];
   shipped: TreeNode[];
   decisions: TreeNode[];
   root: TreeNode[];
+  releases: ReleaseSummary[];
 }
 
 interface TreeState {

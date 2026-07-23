@@ -2,7 +2,7 @@
 id: protocol
 title: "@curaye/protocol — Schema, Parser & Validator"
 domain: protocol
-updated: 2026-07-21
+updated: 2026-07-23
 ---
 
 # @curaye/protocol — Schema, Parser & Validator
@@ -13,7 +13,7 @@ updated: 2026-07-21
 
 ## Schemas
 
-Five Zod schemas cover every document type. All use `.passthrough()` so unknown frontmatter fields are preserved rather than rejected.
+Six Zod schemas cover every document type. All use `.passthrough()` so unknown frontmatter fields are preserved rather than rejected.
 
 | Schema | Document type |
 |---|---|
@@ -22,13 +22,16 @@ Five Zod schemas cover every document type. All use `.passthrough()` so unknown 
 | `ShippedFrontmatterSchema` | `.curaye/shipped/*.md` |
 | `DecisionFrontmatterSchema` | `.curaye/decisions/*.md` |
 | `RootDocFrontmatterSchema` | `.curaye/prd.md`, `stack.md`, `product.md` |
+| `ReleaseFrontmatterSchema` | `.curaye/releases/*.md` |
 
-TypeScript types (`PlannedFrontmatter`, `CurrentFrontmatter`, etc.) are derived from these schemas via `z.infer` — never written by hand.
+`ReleaseFrontmatterSchema` requires `id` (optional), `title`, `status` (`'planning' | 'active' | 'shipped'`), optional `target` (ISO date), `created`, and `updated`.
+
+TypeScript types (`PlannedFrontmatter`, `CurrentFrontmatter`, `ReleaseFrontmatter`, etc.) are derived from these schemas via `z.infer` — never written by hand.
 
 ## Core types
 
 ```ts
-type DocumentType = 'planned' | 'current' | 'shipped' | 'decisions' | 'root'
+type DocumentType = 'planned' | 'current' | 'shipped' | 'decisions' | 'root' | 'releases'
 
 interface ParsedDocument<T = unknown> {
   type:          DocumentType

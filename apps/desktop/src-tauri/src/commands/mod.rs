@@ -124,6 +124,547 @@ pub async fn unlink_project(name: String) -> Result<(), String> {
     write_registry(projects).await
 }
 
+// ── Cross-project backlog ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BacklogSpec {
+    pub project_name: String,
+    pub project_curaye_path: String,
+    pub path: String,
+    pub id: Option<String>,
+    pub title: String,
+    pub status: String,
+    pub effort: Option<String>,
+    pub impact: Option<String>,
+    pub desire: Option<String>,
+    pub release: Option<String>,
+}
+
+#[command]
+pub async fn scan_backlog() -> Result<Vec<BacklogSpec>, String> {
+    let reg_path = registry_path();
+    if !reg_path.exists() {
+        return Ok(vec![]);
+    }
+    let content = tokio::fs::read_to_string(&reg_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let file: RegistryFile = serde_yaml::from_str(&content).map_err(|e| e.to_string())?;
+
+    let mut specs = Vec::new();
+
+    for entry in file.projects {
+        let curaye_path = PathBuf::from(&entry.path).join(".curaye");
+        let planned_dir = curaye_path.join("planned");
+
+        if !planned_dir.is_dir() {
+            continue;
+        }
+
+        let Ok(mut dir_entries) = tokio::fs::read_dir(&planned_dir).await else {
+            continue;
+        };
+
+        while let Ok(Some(dir_entry)) = dir_entries.next_entry().await {
+            let path = dir_entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+
+            let Ok(file_content) = tokio::fs::read_to_string(&path).await else {
+                continue;
+            };
+
+            let fm = parse_frontmatter_quick(&file_content);
+
+            let status = fm
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            if status != "draft" && status != "ready" {
+                continue;
+            }
+
+            let title = fm
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            if title.is_empty() {
+                continue;
+            }
+
+            let id = fm
+                .get("id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            let effort = fm
+                .get("effort")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let impact = fm
+                .get("impact")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let desire = fm
+                .get("desire")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let release = fm
+                .get("release")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            specs.push(BacklogSpec {
+                project_name: entry.name.clone(),
+                project_curaye_path: curaye_path.to_string_lossy().to_string(),
+                path: path.to_string_lossy().to_string(),
+                id,
+                title,
+                status,
+                effort,
+                impact,
+                desire,
+                release,
+            });
+        }
+    }
+
+    Ok(specs)
+}
+
+#[command]
+pub async fn update_spec_status(
+    path: String,
+    status: String,
+    updated: String,
+) -> Result<(), String> {
+    let file_path = PathBuf::from(&path);
+    let content = tokio::fs::read_to_string(&file_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let (mut fm, body) = split_frontmatter(&content);
+    fm.insert("status".to_string(), serde_yaml::Value::String(status));
+    fm.insert("updated".to_string(), serde_yaml::Value::String(updated));
+
+    let fm_yaml = serde_yaml::to_string(&fm).map_err(|e| e.to_string())?;
+    let new_content = format!("---\n{}---\n\n{}", fm_yaml, body.trim_start_matches('\n'));
+
+    write_atomic(&file_path, new_content.as_bytes()).await
+}
+
+// ── Releases ──────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleaseSummary {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub target: Option<String>,
+    pub path: String,
+    pub total: usize,
+    pub done: usize,
+}
+
+fn releases_dir(curaye_path: &str) -> PathBuf {
+    PathBuf::from(curaye_path).join("releases")
+}
+
+async fn count_release_specs(curaye_path: &str, release_id: &str) -> (usize, usize) {
+    let planned_dir = PathBuf::from(curaye_path).join("planned");
+    let Ok(mut entries) = tokio::fs::read_dir(&planned_dir).await else {
+        return (0, 0);
+    };
+    let mut total = 0usize;
+    let mut done = 0usize;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let Ok(content) = tokio::fs::read_to_string(&path).await else {
+            continue;
+        };
+        let fm = parse_frontmatter_quick(&content);
+        let release = fm.get("release").and_then(|v| v.as_str()).unwrap_or("");
+        if release != release_id {
+            continue;
+        }
+        let status = fm.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        if status == "shelved" {
+            continue;
+        }
+        total += 1;
+        if status == "done" {
+            done += 1;
+        }
+    }
+    (total, done)
+}
+
+#[command]
+pub async fn scan_releases(curaye_path: String) -> Result<Vec<ReleaseSummary>, String> {
+    let dir = releases_dir(&curaye_path);
+    if !dir.is_dir() {
+        return Ok(vec![]);
+    }
+    let Ok(mut entries) = tokio::fs::read_dir(&dir).await else {
+        return Ok(vec![]);
+    };
+
+    let mut files: Vec<PathBuf> = vec![];
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("md") {
+            files.push(path);
+        }
+    }
+    files.sort();
+
+    let mut summaries = Vec::new();
+    for file_path in files {
+        let Ok(content) = tokio::fs::read_to_string(&file_path).await else {
+            continue;
+        };
+        let fm = parse_frontmatter_quick(&content);
+
+        let id = fm
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                file_path
+                    .file_stem()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string()
+            });
+
+        let title = fm
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&id)
+            .to_string();
+
+        let status = fm
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("planning")
+            .to_string();
+
+        let target = fm
+            .get("target")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let (total, done) = count_release_specs(&curaye_path, &id).await;
+
+        summaries.push(ReleaseSummary {
+            id,
+            title,
+            status,
+            target,
+            path: file_path.to_string_lossy().to_string(),
+            total,
+            done,
+        });
+    }
+
+    Ok(summaries)
+}
+
+#[command]
+pub async fn create_release(
+    curaye_path: String,
+    name: String,
+    target: Option<String>,
+) -> Result<ReleaseSummary, String> {
+    let dir = releases_dir(&curaye_path);
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let id = name
+        .replace('.', "-")
+        .replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    let filename = format!("{}.md", id);
+    let file_path = dir.join(&filename);
+
+    let today = chrono_today();
+    let mut lines = vec![
+        "---".to_string(),
+        format!("id: {}", id),
+        format!("title: \"{}\"", name),
+        "status: planning".to_string(),
+    ];
+    if let Some(t) = &target {
+        lines.push(format!("target: {}", t));
+    }
+    lines.push(format!("created: {}", today));
+    lines.push(format!("updated: {}", today));
+    lines.push("---".to_string());
+    lines.push(String::new());
+    lines.push(format!("# {}", name));
+    lines.push(String::new());
+
+    let content = lines.join("\n");
+    write_atomic(&file_path, content.as_bytes()).await?;
+
+    Ok(ReleaseSummary {
+        id,
+        title: name,
+        status: "planning".to_string(),
+        target,
+        path: file_path.to_string_lossy().to_string(),
+        total: 0,
+        done: 0,
+    })
+}
+
+#[command]
+pub async fn assign_spec_to_release(
+    spec_path: String,
+    release_id: String,
+    updated: String,
+) -> Result<(), String> {
+    let file_path = PathBuf::from(&spec_path);
+    let content = tokio::fs::read_to_string(&file_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let (mut fm, body) = split_frontmatter(&content);
+    fm.insert("release".to_string(), serde_yaml::Value::String(release_id));
+    fm.insert("updated".to_string(), serde_yaml::Value::String(updated));
+
+    let fm_yaml = serde_yaml::to_string(&fm).map_err(|e| e.to_string())?;
+    let new_content = format!("---\n{}---\n\n{}", fm_yaml, body.trim_start_matches('\n'));
+
+    write_atomic(&file_path, new_content.as_bytes()).await
+}
+
+#[command]
+pub async fn update_release_status(
+    release_path: String,
+    status: String,
+    updated: String,
+) -> Result<(), String> {
+    let file_path = PathBuf::from(&release_path);
+    let content = tokio::fs::read_to_string(&file_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let (mut fm, body) = split_frontmatter(&content);
+    fm.insert("status".to_string(), serde_yaml::Value::String(status));
+    fm.insert("updated".to_string(), serde_yaml::Value::String(updated));
+
+    let fm_yaml = serde_yaml::to_string(&fm).map_err(|e| e.to_string())?;
+    let new_content = format!("---\n{}---\n\n{}", fm_yaml, body.trim_start_matches('\n'));
+
+    write_atomic(&file_path, new_content.as_bytes()).await
+}
+
+#[derive(Debug, Serialize)]
+pub struct ShippedSpecResult {
+    pub spec_id: String,
+    pub shipped_path: String,
+}
+
+#[command]
+pub async fn ship_release(
+    curaye_path: String,
+    release_id: String,
+    today: String,
+) -> Result<Vec<ShippedSpecResult>, String> {
+    let planned_dir = PathBuf::from(&curaye_path).join("planned");
+    let shipped_dir = PathBuf::from(&curaye_path).join("shipped");
+    let releases_dir_path = releases_dir(&curaye_path);
+
+    tokio::fs::create_dir_all(&shipped_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Collect all done specs in this release
+    let Ok(mut entries) = tokio::fs::read_dir(&planned_dir).await else {
+        return Err("Cannot read planned/ directory".to_string());
+    };
+
+    let mut done_specs: Vec<(PathBuf, BTreeMap<String, serde_yaml::Value>, String)> = vec![];
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let Ok(content) = tokio::fs::read_to_string(&path).await else {
+            continue;
+        };
+        let (fm, body) = split_frontmatter(&content);
+        let release = fm.get("release").and_then(|v| v.as_str()).unwrap_or("");
+        let status = fm.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        if release == release_id && status == "done" {
+            done_specs.push((path, fm, body));
+        }
+    }
+
+    let mut results = Vec::new();
+
+    for (spec_path, fm, _body) in &done_specs {
+        let spec_id = fm
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                spec_path
+                    .file_stem()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string()
+            });
+
+        let title = fm
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&spec_id)
+            .to_string();
+
+        let shipped_path = shipped_dir.join(format!("{}.md", spec_id));
+        let shipped_content = format!(
+            "---\nid: {}\ntitle: \"{}\"\nshipped: {}\nrelease: \"{}\"\nspec_ref: \"{}\"\n---\n\n# {}\n\n> Shipped in {} on {}\n\n## What shipped\n\n## Changes to current/\n\n## Notes\n",
+            spec_id, title, today, release_id, spec_id, title, release_id, today
+        );
+
+        write_atomic(&shipped_path, shipped_content.as_bytes()).await?;
+        tokio::fs::remove_file(spec_path)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        results.push(ShippedSpecResult {
+            spec_id,
+            shipped_path: shipped_path.to_string_lossy().to_string(),
+        });
+    }
+
+    // Mark release as shipped
+    let release_file = releases_dir_path.join(format!("{}.md", release_id));
+    if release_file.exists() {
+        update_release_status(
+            release_file.to_string_lossy().to_string(),
+            "shipped".to_string(),
+            today,
+        )
+        .await?;
+    }
+
+    Ok(results)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleaseSpecItem {
+    pub path: String,
+    pub id: Option<String>,
+    pub title: String,
+    pub status: String,
+    pub effort: Option<String>,
+    pub release: Option<String>,
+}
+
+#[command]
+pub async fn scan_release_specs(
+    curaye_path: String,
+    release_id: String,
+) -> Result<Vec<ReleaseSpecItem>, String> {
+    let planned_dir = PathBuf::from(&curaye_path).join("planned");
+    if !planned_dir.is_dir() {
+        return Ok(vec![]);
+    }
+
+    let Ok(mut entries) = tokio::fs::read_dir(&planned_dir).await else {
+        return Ok(vec![]);
+    };
+
+    let mut specs: Vec<ReleaseSpecItem> = vec![];
+
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let Ok(content) = tokio::fs::read_to_string(&path).await else {
+            continue;
+        };
+        let fm = parse_frontmatter_quick(&content);
+
+        let release = fm
+            .get("release")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if release != release_id {
+            continue;
+        }
+
+        let status = fm
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("draft")
+            .to_string();
+
+        if status == "shelved" {
+            continue;
+        }
+
+        let title = fm
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if title.is_empty() {
+            continue;
+        }
+
+        let id = fm
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let effort = fm
+            .get("effort")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        specs.push(ReleaseSpecItem {
+            path: path.to_string_lossy().to_string(),
+            id,
+            title,
+            status,
+            effort,
+            release: Some(release),
+        });
+    }
+
+    specs.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(specs)
+}
+
 // ── Document scanning ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +684,7 @@ pub struct ProjectTree {
     pub shipped: Vec<TreeNode>,
     pub decisions: Vec<TreeNode>,
     pub root: Vec<TreeNode>,
+    pub releases: Vec<ReleaseSummary>,
 }
 
 #[command]
@@ -154,6 +696,7 @@ pub async fn scan_project(curaye_path: String) -> Result<ProjectTree, String> {
     scan_section(&base, "current", &mut tree.current).await;
     scan_section(&base, "shipped", &mut tree.shipped).await;
     scan_section(&base, "decisions", &mut tree.decisions).await;
+    tree.releases = scan_releases(curaye_path.clone()).await.unwrap_or_default();
 
     for name in &["prd.md", "stack.md", "AGENTS.md"] {
         let path = base.join(name);

@@ -6,6 +6,7 @@ import {
   ShippedFrontmatterSchema,
   DecisionFrontmatterSchema,
   RootDocFrontmatterSchema,
+  ReleaseFrontmatterSchema,
 } from './schemas.js'
 import type { DocumentType, ParsedDocument, ValidationResult, ValidationIssue } from './types.js'
 import path from 'node:path'
@@ -16,6 +17,7 @@ const SCHEMA_MAP = {
   shipped: ShippedFrontmatterSchema,
   decisions: DecisionFrontmatterSchema,
   root: RootDocFrontmatterSchema,
+  releases: ReleaseFrontmatterSchema,
 } satisfies Record<DocumentType, z.ZodTypeAny>
 
 /**
