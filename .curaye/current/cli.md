@@ -2,7 +2,7 @@
 id: cli
 title: CLI — Command Surface
 domain: cli
-updated: 2026-07-21
+updated: 2026-07-23
 ---
 
 # CLI — Command Surface
@@ -35,6 +35,7 @@ updated: 2026-07-21
 | `curaye list [--project <id>] [--status <status>] [--tag <tag>]` | Lists planned specs. Columns: id, title, status, effort. |
 | `curaye status <spec-id> <new-status> [--project <id>]` | Updates `status` field and sets `updated` to today. |
 | `curaye ship <spec-id> [--project <id>] [--release <release>]` | Creates `shipped/` document, prompts to update `current/`, removes planned spec. |
+| `curaye backlog [--status draft\|ready] [--sort impact\|desire\|effort] [--project <id>]` | Cross-project backlog: aggregates `planned/` specs with `status: draft \| ready` from all registered projects (or one). `--sort effort` orders xs → xl; `--sort impact` and `--sort desire` order high → low. `--json` for structured output. |
 
 ## Sync
 

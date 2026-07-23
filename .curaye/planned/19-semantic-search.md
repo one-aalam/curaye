@@ -1,14 +1,20 @@
 ---
-id: semantic-search
-title: Semantic Search — Cross-Project
-status: draft
-effort: l
-impact: high
-desire: high
-requires: [package-core, package-ai]
-tags: [core, ai, cli, desktop]
 created: 2026-07-21
-updated: 2026-07-21
+desire: high
+effort: l
+id: semantic-search
+impact: high
+requires:
+- package-core
+- package-ai
+status: ready
+tags:
+- core
+- ai
+- cli
+- desktop
+title: Semantic Search — Cross-Project
+updated: 2026-07-23
 ---
 
 # Semantic Search — Cross-Project
