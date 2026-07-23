@@ -113,6 +113,18 @@ All AI commands require a configured provider.
 | `curaye review [path]` | Lists all documents with `confidence: inferred`, opens each in `$EDITOR`, and removes the `confidence` field when the user marks it reviewed — converting it to a standard protocol document. Supports `--json` to list inferred docs without interactive review. |
 | `curaye promote <file> [--to decisions\|patterns\|design\|agents\|stack] [--project <id>] [--id <id>]` | Promotes a `current/` or `decisions/` document to `~/.curaye/shared/<category>/`. Resolves the file path relative to the project's `.curaye/` directory, then falls back to cwd. Interactively prompts for category and id when `--to` / `--id` are omitted; in `--json` mode both must be supplied. Adds `source_project`, `promoted`, and `adopted_by` frontmatter fields; notifies all other registered projects via `~/.curaye/notifications.yaml`. Offers AI generalisation (removes project-specific names) when a provider is configured. Asks whether to add `promoted_to: <docRef>` back to the source document. Running promote on the same file twice updates the shared document in place. Promoting a `planned/` document errors: "Only current/ and decisions/ documents can be promoted." |
 
+## Skill distribution
+
+`@curaye/cli` bundles all six Curaye Claude Code skills in a `skills/` directory alongside `dist/`. A single command copies them to `~/.claude/commands/`, making `/curaye-build`, `/curaye-ship`, `/curaye-brief`, `/curaye-bootstrap`, `/curaye-import`, and `/curaye-check` available as slash commands in every Claude Code session on the machine.
+
+| Command | Description |
+|---|---|
+| `curaye skill install [--path <dir>]` | Copies all 6 bundled skill files to `~/.claude/commands/` (or custom `--path`). Skips files that already exist. Prints an install summary on success; prints "Already installed. Use --update to upgrade." when all files are already present. |
+| `curaye skill install --update [--path <dir>]` | Same as above but overwrites existing skill files with the current CLI version's copies. |
+| `curaye skill install --list [--path <dir>]` | Shows each skill's installed version vs the version bundled with the current CLI, with a `✓` or `← update available` status column. |
+
+Each skill file begins with `<!-- curaye-skill: vX.Y.Z -->` matching the CLI package version. The `--list` command reads this header to compare versions. The `skills/` directory is included in the npm package via the `files` field in `package.json`.
+
 ## Binary distribution
 
 Built with `pkgroll` or `esbuild` targeting Node.js. Binaries published to GitHub Releases for:
