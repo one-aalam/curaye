@@ -5,6 +5,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
 import { cn } from "@/lib/utils";
+import { MarkdownContent } from "@/components/ui/markdown";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -99,15 +100,18 @@ export function BriefView() {
           </div>
         )}
         {!error && (
-          <pre
+          <div
             className={cn(
-              "text-[12px] leading-relaxed font-mono whitespace-pre-wrap break-words",
-              "text-foreground/90",
               streaming && "after:content-['▊'] after:animate-pulse after:text-primary",
             )}
           >
-            {content || (streaming ? "" : "Generating brief…")}
-          </pre>
+            {content
+              ? <MarkdownContent>{content}</MarkdownContent>
+              : streaming
+                ? null
+                : <p className="text-xs text-muted-foreground">Generating brief…</p>
+            }
+          </div>
         )}
       </div>
     </div>

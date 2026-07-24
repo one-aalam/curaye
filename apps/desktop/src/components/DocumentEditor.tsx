@@ -1,10 +1,10 @@
-import { useEffect, useCallback, useRef } from "react";
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { useEffect, useCallback, useRef, useState } from "react";
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Pencil, Eye, Check, ChevronDown as ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorMode, type ValidationIssue } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
 import { TabsRoot, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
-import { useState } from "react";
+import { MarkdownContent } from "@/components/ui/markdown";
 
 // ── Segmented control ─────────────────────────────────────────────────────────
 
@@ -167,6 +167,200 @@ const STATUS_OPTIONS = ["draft", "ready", "building", "done", "shelved"];
 const EFFORT_OPTIONS = ["xs", "s", "m", "l", "xl"];
 const LEVEL_OPTIONS = ["low", "medium", "high"];
 
+// ── Read-only date field ──────────────────────────────────────────────────────
+
+function DateField({ value, label }: { value: string | undefined; label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-16 text-[10px] font-medium text-muted-foreground flex-shrink-0 capitalize">
+        {label}
+      </span>
+      <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+        {value ?? "—"}
+      </span>
+    </div>
+  );
+}
+
+// ── Spec ID multi-select ──────────────────────────────────────────────────────
+
+function SpecIdSelect({
+  values,
+  onChange,
+  field,
+}: {
+  values: string[];
+  onChange: (v: string[]) => void;
+  field: string;
+}) {
+  const activeField = useEditorStore((s) => s.activeIssueField);
+  const isHighlighted = activeField === field;
+  const tree = useTreeStore((s) => s.tree);
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Derive spec IDs from the planned section of the tree
+  const plannedIds = (tree?.planned ?? [])
+    .map((n) => n.name.replace(/\.md$/, "").replace(/^_/, ""))
+    .filter((id) => id.length > 0);
+
+  const filtered = filter
+    ? plannedIds.filter((id) => id.includes(filter.toLowerCase()))
+    : plannedIds;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setFilter("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const toggle = (id: string) => {
+    onChange(values.includes(id) ? values.filter((v) => v !== id) : [...values, id]);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setOpen((o) => !o); }}
+        className={cn(
+          "flex flex-wrap gap-1 rounded-md px-2 py-1 min-h-[28px] cursor-pointer",
+          "bg-muted/30 border border-border/50 focus-within:border-ring/50 transition-colors",
+          isHighlighted && "ring-2 ring-destructive",
+        )}
+      >
+        {values.length === 0 && (
+          <span className="text-[10px] text-muted-foreground/40 self-center">none</span>
+        )}
+        {values.map((id) => (
+          <span
+            key={id}
+            className="flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary"
+          >
+            {id}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); toggle(id); }}
+              className="opacity-60 hover:opacity-100 leading-none"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <ChevronDownIcon size={10} className="ml-auto self-center text-muted-foreground/50" />
+      </div>
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-20 rounded-md border border-border/50 bg-card shadow-lg overflow-hidden">
+          <div className="p-1.5 border-b border-border/30">
+            <input
+              autoFocus
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter spec ids…"
+              className="w-full text-[10px] bg-transparent outline-none placeholder:text-muted-foreground/40"
+            />
+          </div>
+          <div className="max-h-40 overflow-y-auto py-1">
+            {filtered.length === 0 && (
+              <p className="px-3 py-1.5 text-[10px] text-muted-foreground/40">No matching specs</p>
+            )}
+            {filtered.map((id) => {
+              const selected = values.includes(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggle(id)}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-3 py-1.5 text-[10px] text-left transition-colors",
+                    selected
+                      ? "text-primary bg-primary/5"
+                      : "text-foreground/80 hover:bg-accent",
+                  )}
+                >
+                  {selected && <Check size={9} className="flex-shrink-0" />}
+                  {!selected && <span className="w-[9px] flex-shrink-0" />}
+                  {id}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Body editor: markdown preview with edit toggle ────────────────────────────
+
+function BodyEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-4 pt-3 pb-1 flex-shrink-0">
+        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+          Body
+        </span>
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
+        >
+          {editing ? <><Eye size={10} />Preview</> : <><Pencil size={10} />Edit</>}
+        </button>
+      </div>
+
+      {editing ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoFocus
+          className={cn(
+            "flex-1 w-full px-4 pb-4 font-mono text-xs resize-none bg-transparent",
+            "focus:outline-none text-foreground/90",
+            "placeholder:text-muted-foreground/30",
+          )}
+          placeholder={"## Problem\n...\n\n## Goal\n..."}
+          spellCheck={false}
+        />
+      ) : (
+        <div
+          className="flex-1 overflow-y-auto px-4 pb-4 cursor-text"
+          onClick={() => setEditing(true)}
+        >
+          {value.trim() ? (
+            <MarkdownContent>{value}</MarkdownContent>
+          ) : (
+            <p
+              className="text-xs text-muted-foreground/30 italic"
+              onClick={() => setEditing(true)}
+            >
+              Click to start writing…
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StructuredForm() {
   const { document, updateFrontmatter, updateBody } = useEditorStore();
   if (!document) return null;
@@ -174,8 +368,8 @@ function StructuredForm() {
   const fm = document.frontmatter;
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
-      <div className="p-4 space-y-3 border-b border-border/50">
+    <div className="flex flex-col h-full">
+      <div className="p-4 space-y-3 border-b border-border/50 overflow-y-auto flex-shrink-0">
         <FieldRow label="title">
           <TextInput
             field="title"
@@ -222,11 +416,10 @@ function StructuredForm() {
         </FieldRow>
 
         <FieldRow label="requires">
-          <TagInput
+          <SpecIdSelect
             field="requires"
             values={(fm["requires"] as string[] | undefined) ?? []}
             onChange={(v) => updateFrontmatter("requires", v)}
-            placeholder="spec-id…"
           />
         </FieldRow>
 
@@ -248,36 +441,11 @@ function StructuredForm() {
           />
         </FieldRow>
 
-        <FieldRow label="created">
-          <TextInput
-            field="created"
-            value={fm["created"] as string | undefined}
-            onChange={(v) => updateFrontmatter("created", v)}
-            placeholder="YYYY-MM-DD"
-          />
-        </FieldRow>
-
-        <FieldRow label="updated">
-          <TextInput
-            field="updated"
-            value={fm["updated"] as string | undefined}
-            onChange={(v) => updateFrontmatter("updated", v)}
-            placeholder="YYYY-MM-DD"
-          />
-        </FieldRow>
+        <DateField label="created" value={fm["created"] as string | undefined} />
+        <DateField label="updated" value={fm["updated"] as string | undefined} />
       </div>
 
-      <textarea
-        value={document.body}
-        onChange={(e) => updateBody(e.target.value)}
-        className={cn(
-          "flex-1 w-full p-4 font-mono text-xs resize-none bg-transparent",
-          "focus:outline-none text-foreground/90",
-          "placeholder:text-muted-foreground/30",
-        )}
-        placeholder="## Problem&#10;...&#10;&#10;## Goal&#10;..."
-        spellCheck={false}
-      />
+      <BodyEditor value={document.body} onChange={updateBody} />
     </div>
   );
 }

@@ -250,6 +250,7 @@ interface BriefState {
   // Last-opened tracking
   lastOpenedDate: string | null;
   isDormant: boolean;
+  _unlisten: (() => void) | null;
   generateBrief: (curayePath: string, aiConfig: unknown | null) => Promise<void>;
   cancelBrief: () => void;
   saveBrief: (curayePath: string, date: string) => Promise<string>;
@@ -267,6 +268,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   error: null,
   lastOpenedDate: null,
   isDormant: false,
+  _unlisten: null,
 
   generateBrief: async (curayePath: string, aiConfig: unknown | null) => {
     set({ active: true, streaming: true, content: "", error: null });
@@ -290,23 +292,32 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       const messages = buildAiMessages(ctx);
       let accumulated = "";
 
-      const unlisten = await listen<AiStreamEvent>("ai-stream", (event) => {
+      // Set up listener before starting the stream. The listener cleans itself
+      // up on Done/Error — do NOT call unlisten() in a finally block because
+      // start_ai_stream returns immediately (it spawns a background task).
+      let unlistenFn: (() => void) | undefined;
+      const cleanup = () => {
+        unlistenFn?.();
+        unlistenFn = undefined;
+        set({ _unlisten: null });
+      };
+
+      unlistenFn = await listen<AiStreamEvent>("ai-stream", (event) => {
         const ev = event.payload;
         if (ev.type === "Token" && ev.payload) {
           accumulated += ev.payload;
           set({ content: accumulated });
         } else if (ev.type === "Done") {
+          cleanup();
           set({ streaming: false, content: accumulated });
         } else if (ev.type === "Error") {
+          cleanup();
           set({ streaming: false, error: ev.payload ?? "AI stream error" });
         }
       });
+      set({ _unlisten: cleanup });
 
-      try {
-        await invoke("start_ai_stream", { config: aiConfig, messages });
-      } finally {
-        unlisten();
-      }
+      await invoke("start_ai_stream", { config: aiConfig, messages });
     } catch (err) {
       set({ streaming: false, error: String(err) });
     }
@@ -314,7 +325,8 @@ export const useBriefStore = create<BriefState>((set, get) => ({
 
   cancelBrief: () => {
     void invoke("cancel_ai_stream");
-    set({ streaming: false });
+    get()._unlisten?.();
+    set({ streaming: false, _unlisten: null });
   },
 
   saveBrief: async (curayePath: string, date: string): Promise<string> => {
@@ -323,7 +335,8 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   },
 
   closeBrief: () => {
-    set({ active: false, content: "", context: null, error: null, streaming: false });
+    get()._unlisten?.();
+    set({ active: false, content: "", context: null, error: null, streaming: false, _unlisten: null });
   },
 
   loadLastOpened: async (curayePath: string) => {

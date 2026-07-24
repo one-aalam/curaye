@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { Search, Sparkles, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,7 @@ import {
   usePaletteStore,
   type DiffLine,
 } from "@/stores/paletteStore";
+import { MarkdownContent } from "@/components/ui/markdown";
 
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
@@ -24,14 +25,40 @@ const SUGGESTIONS = [
 function InputPhase() {
   const { query, setQuery, execute, closePalette } = usePaletteStore();
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  // Scroll active item into view when navigating by keyboard
+  useEffect(() => {
+    if (activeIndex < 0 || !listRef.current) return;
+    const el = listRef.current.children[activeIndex] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
+  // Reset highlight when query is typed manually (not via suggestion click)
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [query]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && query.trim()) {
-      void execute();
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, SUGGESTIONS.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, -1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeIndex >= 0) {
+        const s = SUGGESTIONS[activeIndex];
+        if (s) { setQuery(s); void execute(); }
+      } else if (query.trim()) {
+        void execute();
+      }
     }
   };
 
@@ -63,24 +90,36 @@ function InputPhase() {
         <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-1 mb-2">
           Suggestions
         </p>
-        <div className="space-y-0.5">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => {
-                setQuery(s);
-                void execute();
-              }}
-              className={cn(
-                "flex items-center gap-2 w-full rounded-md px-3 py-1.5 text-sm text-left",
-                "hover:bg-accent/60 transition-colors",
-              )}
-            >
-              <Sparkles size={12} className="text-primary flex-shrink-0" />
-              {s}
-            </button>
-          ))}
+        <div ref={listRef} className="space-y-0.5">
+          {SUGGESTIONS.map((s, idx) => {
+            const isActive = idx === activeIndex;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => { setQuery(s); void execute(); }}
+                onMouseEnter={() => setActiveIndex(idx)}
+                className={cn(
+                  "flex items-center gap-2 w-full rounded-md px-3 py-1.5 text-sm text-left transition-colors",
+                  isActive
+                    ? "bg-primary/12 text-primary ring-1 ring-primary/25"
+                    : "text-foreground/70 hover:bg-primary/6 hover:text-foreground",
+                )}
+              >
+                <Sparkles
+                  size={12}
+                  className={cn(
+                    "flex-shrink-0 transition-colors",
+                    isActive ? "text-primary" : "text-muted-foreground",
+                  )}
+                />
+                <span className="flex-1">{s}</span>
+                {isActive && (
+                  <kbd className="text-[10px] text-primary/60 font-mono">↵</kbd>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -92,7 +131,7 @@ function InputPhase() {
 function StreamingPhase() {
   const { resolvedAction, streamedText, error, saveOutput, cancelStream, closePalette, _abortController } =
     usePaletteStore();
-  const scrollRef = useRef<HTMLPreElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const isStreaming = _abortController !== null;
 
   useEffect(() => {
@@ -123,19 +162,17 @@ function StreamingPhase() {
         <span className="text-xs font-medium text-foreground/80 truncate">{actionLabel}</span>
       </div>
 
-      <pre
-        ref={scrollRef}
-        className={cn(
-          "flex-1 overflow-y-auto p-4 text-xs font-mono text-foreground/90",
-          "whitespace-pre-wrap break-words leading-relaxed",
-          "min-h-0",
-        )}
+      <div
+        ref={scrollRef as React.RefObject<HTMLDivElement>}
+        className="flex-1 overflow-y-auto p-4 min-h-0"
       >
-        {streamedText}
+        {streamedText && (
+          <MarkdownContent>{streamedText}</MarkdownContent>
+        )}
         {isStreaming && (
           <span className="inline-block w-0.5 h-3.5 bg-primary align-middle ml-px animate-blink" />
         )}
-      </pre>
+      </div>
 
       {error && (
         <p className="px-4 pb-2 text-xs text-destructive">{error}</p>
@@ -319,7 +356,7 @@ export function AIPalette() {
   const showUnavailable = aiConfigChecked && aiConfig === null;
 
   const panelHeight =
-    phase === "diff" ? "h-[60vh]" : phase === "streaming" ? "max-h-[70vh]" : "h-auto";
+    phase === "diff" ? "h-[60vh]" : phase === "streaming" ? "h-[70vh]" : "h-auto";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
