@@ -57,16 +57,38 @@ html.tauri body {
   background-color: transparent;
 }
 
-/* Semi-transparent surfaces so the blurred desktop shows through */
+/* Semi-transparent surfaces so the blurred desktop shows through (dark themes) */
 html.tauri .vibrancy-bg {
   background-color: color-mix(in srgb, var(--background) 78%, transparent) !important;
-  background-image: none !important;
+  background-image:
+    radial-gradient(ellipse 60% 50% at 80% 5%, color-mix(in srgb, var(--color-gold) 16%, transparent), transparent 100%),
+    radial-gradient(ellipse 55% 40% at 5% 90%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 100%) !important;
 }
 html.tauri .vibrancy-card {
   background-color: color-mix(in srgb, var(--card) 82%, transparent) !important;
 }
+/* Sidebar: fully opaque. HudWindow vibrancy is always dark-tinted so transparency
+   washes out dark sidebar colors — all themes look identical at 80% opacity. */
 html.tauri .vibrancy-sidebar {
-  background-color: color-mix(in srgb, var(--sidebar) 80%, transparent) !important;
+  background-color: var(--sidebar) !important;
+}
+
+/*
+ * Light themes: HudWindow vibrancy is always dark-tinted regardless of system
+ * appearance, so semi-transparent surfaces fight light backgrounds. Override
+ * to fully opaque — light themes don't need vibrancy depth, they need clarity.
+ * Higher specificity (0,3,1) beats the base rules (0,2,1) even with !important.
+ */
+html.tauri[data-theme="saffron"] .vibrancy-bg,
+html.tauri[data-theme="chaadar"] .vibrancy-bg {
+  background-color: var(--background) !important;
+  background-image:
+    radial-gradient(ellipse 60% 50% at 80% 5%, color-mix(in srgb, var(--color-gold) 18%, transparent), transparent 100%),
+    radial-gradient(ellipse 55% 40% at 5% 90%, color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 100%) !important;
+}
+html.tauri[data-theme="saffron"] .vibrancy-card,
+html.tauri[data-theme="chaadar"] .vibrancy-card {
+  background-color: var(--card) !important;
 }
 
 /* Fallback values — overridden by [data-theme="..."] blocks in glass.css */

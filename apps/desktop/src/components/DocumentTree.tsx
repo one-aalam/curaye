@@ -19,6 +19,22 @@ const STATUS_DOT: Record<string, string> = {
   shelved: "bg-zinc-600",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  draft: "draft",
+  ready: "ready",
+  building: "wip",
+  done: "done",
+  shelved: "shelved",
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  draft: "text-zinc-400",
+  ready: "text-blue-400",
+  building: "text-amber-400",
+  done: "text-green-500",
+  shelved: "text-zinc-500",
+};
+
 const SECTION_LABELS: Record<DocSection, string> = {
   planned: "planned/",
   current: "current/",
@@ -37,8 +53,19 @@ const DOC_TYPES: Record<DocSection, string> = {
 
 function StatusBadge({ status }: { status?: string | undefined }) {
   if (status === undefined) return null;
-  const color = STATUS_DOT[status] ?? "bg-zinc-400";
-  return <span className={cn("inline-block h-1.5 w-1.5 rounded-full flex-shrink-0", color)} />;
+  const dot = STATUS_DOT[status] ?? "bg-zinc-400";
+  return <span className={cn("inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 mt-px", dot)} />;
+}
+
+function StatusLabel({ status, selected }: { status?: string; selected: boolean }) {
+  if (!status) return null;
+  const label = STATUS_LABEL[status] ?? status;
+  const color = selected ? "text-primary/70" : (STATUS_TEXT[status] ?? "text-muted-foreground/50");
+  return (
+    <span className={cn("text-[9px] font-medium uppercase tracking-wide flex-shrink-0", color)}>
+      {label}
+    </span>
+  );
 }
 
 function TreeItem({ node, section }: { node: TreeNode; section: DocSection }) {
@@ -52,6 +79,9 @@ function TreeItem({ node, section }: { node: TreeNode; section: DocSection }) {
   const [showPromote, setShowPromote] = useState(false);
 
   const canPromote = section === "current" || section === "decisions";
+
+  // Strip .md extension and leading _ for display
+  const displayName = node.name.replace(/\.md$/, "").replace(/^_/, "");
 
   const handleClick = () => {
     selectDocument(node.path);
@@ -92,19 +122,28 @@ function TreeItem({ node, section }: { node: TreeNode; section: DocSection }) {
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         className={cn(
-          "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11px] transition-colors",
+          "group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition-colors",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           selected
-            ? "bg-primary/10 text-primary font-medium"
-            : "text-foreground/70 hover:bg-accent hover:text-foreground",
-          node.isDraft && "italic text-muted-foreground",
+            ? "bg-primary/10 text-primary"
+            : "text-foreground/70 hover:bg-foreground/[0.06] hover:text-foreground",
+          node.isDraft && "opacity-60",
         )}
       >
         {section === "planned" && <StatusBadge status={node.status} />}
         {node.hasValidationError && (
           <AlertCircle size={10} className="text-destructive flex-shrink-0" />
         )}
-        <span className="flex-1 truncate">{node.name}</span>
+        <span className={cn(
+          "flex-1 truncate text-[11px]",
+          selected ? "font-medium" : "",
+          node.isDraft && "italic",
+        )}>
+          {displayName}
+        </span>
+        {section === "planned" && node.status !== undefined && (
+          <StatusLabel status={node.status} selected={selected} />
+        )}
       </button>
 
       {showPromote && selectedProjectId && (
@@ -176,7 +215,7 @@ function SectionHeader({
       <button
         type="button"
         onClick={(e) => void handleNew(e)}
-        className="mr-1 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent text-muted-foreground"
+        className="mr-1 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/[0.06] text-muted-foreground"
         title={`New ${section} document`}
       >
         <Plus size={10} />
@@ -228,7 +267,7 @@ function ReleaseItem({ release }: { release: ReleaseSummary }) {
         "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         isActive
           ? "bg-primary/10 text-primary font-medium"
-          : "text-foreground/70 hover:bg-accent hover:text-foreground",
+          : "text-foreground/70 hover:bg-foreground/[0.06] hover:text-foreground",
         release.status === "shipped" && !isActive && "opacity-50",
       )}
     >
@@ -342,7 +381,7 @@ function TreePanelHeader() {
           "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors flex-shrink-0",
           isDormant
             ? "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
-            : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-accent",
+            : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-foreground/[0.06]",
         )}
         title="Generate re-entry brief"
       >

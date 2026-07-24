@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, RefreshCw, Plus, LayoutList } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, LayoutList, Folder, FolderDot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type RegistryProject } from "@/stores/projectStore";
 import { useTreeStore } from "@/stores/treeStore";
@@ -51,14 +51,17 @@ function ProjectItem({ project, selected }: { project: RegistryProject; selected
         onClick={handleSelect}
         onContextMenu={handleContextMenu}
         className={cn(
-          "flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-xs transition-colors",
+          "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-all",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
           selected
-            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-            : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+            ? "bg-sidebar-primary/15 text-sidebar-primary font-medium shadow-sm"
+            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
         )}
       >
-        <SyncDot status={project.sync_status} />
+        {selected
+          ? <FolderDot size={13} className="flex-shrink-0 text-sidebar-primary" />
+          : <Folder size={13} className="flex-shrink-0 text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70 transition-colors" />
+        }
         <span className="flex-1 truncate">{project.name}</span>
         {(project.drift_count ?? 0) > 0 && (
           <span
@@ -67,10 +70,14 @@ function ProjectItem({ project, selected }: { project: RegistryProject; selected
           />
         )}
         {(project.ready_count ?? 0) > 0 && (
-          <span className="text-[10px] text-sidebar-primary font-medium">
+          <span className={cn(
+            "text-[9px] font-semibold px-1 py-0.5 rounded-full flex-shrink-0",
+            selected ? "bg-sidebar-primary/20 text-sidebar-primary" : "bg-sidebar-accent text-sidebar-foreground/60",
+          )}>
             {project.ready_count}
           </span>
         )}
+        <SyncDot status={project.sync_status} />
       </button>
       <MenuContent anchor={anchor} side="bottom" align="start" sideOffset={4}>
         <MenuItem onClick={() => invoke("reveal_in_finder", { path: project.curaye_path })}>
@@ -127,7 +134,6 @@ export function ProjectsSidebar() {
       className="flex flex-col h-full vibrancy-sidebar"
       style={{
         background: "var(--sidebar)",
-        backdropFilter: "blur(var(--glass-blur))",
         borderRight: "1px solid var(--glass-border)",
       }}
     >
