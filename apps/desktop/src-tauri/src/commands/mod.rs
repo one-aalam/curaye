@@ -1038,6 +1038,10 @@ pub struct AiProviderConfig {
     pub api_key: Option<String>,
     pub model: String,
     pub base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embed_provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embed_model: Option<String>,
 }
 
 fn ai_config_path() -> PathBuf {
@@ -1081,7 +1085,7 @@ pub async fn get_ai_config() -> Result<Option<AiProviderConfig>, String> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("claude-sonnet-5")
                 .to_string();
-            AiProviderConfig { kind: "anthropic".into(), api_key, model, base_url: None }
+            AiProviderConfig { kind: "anthropic".into(), api_key, model, base_url: None, embed_provider: None, embed_model: None }
         }
         "ollama" => {
             let section = ai.get("ollama");
@@ -1094,7 +1098,7 @@ pub async fn get_ai_config() -> Result<Option<AiProviderConfig>, String> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("llama3")
                 .to_string();
-            AiProviderConfig { kind: "ollama".into(), api_key: None, model, base_url }
+            AiProviderConfig { kind: "ollama".into(), api_key: None, model, base_url, embed_provider: None, embed_model: None }
         }
         "openai" => {
             let section = ai.get("openai");
@@ -1111,12 +1115,15 @@ pub async fn get_ai_config() -> Result<Option<AiProviderConfig>, String> {
                 .and_then(|v| v.get("baseUrl"))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            AiProviderConfig { kind: "openai".into(), api_key, model, base_url }
+            AiProviderConfig { kind: "openai".into(), api_key, model, base_url, embed_provider: None, embed_model: None }
         }
         _ => return Ok(None),
     };
 
-    Ok(Some(cfg))
+    let embed_provider = ai.get("embed").and_then(|v| v.get("provider")).and_then(|v| v.as_str()).map(|s| s.to_string());
+    let embed_model = ai.get("embed").and_then(|v| v.get("model")).and_then(|v| v.as_str()).map(|s| s.to_string());
+
+    Ok(Some(AiProviderConfig { embed_provider, embed_model, ..cfg }))
 }
 
 // ── AI streaming ──────────────────────────────────────────────────────────────
@@ -2194,4 +2201,194 @@ async fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ── Semantic search ───────────────────────────────────────────────────────────
+
+fn index_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("index")
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SearchManifestEntry {
+    key: String,
+    #[serde(rename = "projectId")]
+    project_id: String,
+    #[serde(rename = "type")]
+    doc_type: String,
+    title: String,
+    #[serde(rename = "filePath")]
+    file_path: String,
+    snippet: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchManifest {
+    dimensions: usize,
+    #[serde(rename = "indexedAt")]
+    indexed_at: String,
+    entries: Vec<SearchManifestEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResult {
+    #[serde(rename = "projectId")]
+    pub project_id: String,
+    #[serde(rename = "type")]
+    pub doc_type: String,
+    pub title: String,
+    #[serde(rename = "filePath")]
+    pub file_path: String,
+    pub snippet: String,
+    pub score: f32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchIndexStatus {
+    pub exists: bool,
+    #[serde(rename = "indexedAt", skip_serializing_if = "Option::is_none")]
+    pub indexed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projects: Option<Vec<String>>,
+}
+
+#[command]
+pub async fn search_index_status() -> Result<SearchIndexStatus, String> {
+    let manifest_path = index_dir().join("manifest.json");
+    if !manifest_path.exists() {
+        return Ok(SearchIndexStatus { exists: false, indexed_at: None, count: None, projects: None });
+    }
+    let raw = tokio::fs::read_to_string(&manifest_path).await.map_err(|e| e.to_string())?;
+    let manifest: SearchManifest = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let mut projects: Vec<String> = manifest.entries.iter().map(|e| e.project_id.clone()).collect();
+    projects.sort();
+    projects.dedup();
+    Ok(SearchIndexStatus {
+        exists: true,
+        indexed_at: Some(manifest.indexed_at),
+        count: Some(manifest.entries.len()),
+        projects: Some(projects),
+    })
+}
+
+#[command]
+pub async fn search_semantic(
+    query_vector: Vec<f32>,
+    project_id: Option<String>,
+    doc_type: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<SearchResult>, String> {
+    let dir = index_dir();
+    let index_path = dir.join("index.usearch");
+    let manifest_path = dir.join("manifest.json");
+
+    if !index_path.exists() || !manifest_path.exists() {
+        return Ok(vec![]);
+    }
+
+    let raw = tokio::fs::read_to_string(&manifest_path).await.map_err(|e| e.to_string())?;
+    let manifest: SearchManifest = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    if manifest.dimensions == 0 || manifest.entries.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let index_path_str = index_path.to_string_lossy().to_string();
+    let index = tokio::task::spawn_blocking(move || {
+        usearch::Index::restore(&index_path_str).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let lim = limit.unwrap_or(10);
+    let k = (index.size() as usize).min(lim * 10).max(1);
+
+    let matches = index.search::<f32>(&query_vector, k).map_err(|e| e.to_string())?;
+
+    let mut results: Vec<SearchResult> = Vec::new();
+    for (i, &key) in matches.keys.iter().enumerate() {
+        let distance = matches.distances.get(i).copied().unwrap_or(1.0);
+        let score = (1.0_f32 - distance).max(0.0).min(1.0);
+        let idx = key as usize;
+        let Some(entry) = manifest.entries.get(idx) else { continue };
+
+        if let Some(ref pid) = project_id {
+            if &entry.project_id != pid { continue; }
+        }
+        if let Some(ref dt) = doc_type {
+            if &entry.doc_type != dt { continue; }
+        }
+
+        results.push(SearchResult {
+            project_id: entry.project_id.clone(),
+            doc_type: entry.doc_type.clone(),
+            title: entry.title.clone(),
+            file_path: entry.file_path.clone(),
+            snippet: entry.snippet.clone(),
+            score,
+        });
+
+        if results.len() >= lim { break; }
+    }
+
+    Ok(results)
+}
+
+#[command]
+pub async fn search_keyword(
+    query: String,
+    curaye_paths: Vec<String>,
+    doc_type: Option<String>,
+) -> Result<Vec<SearchResult>, String> {
+    let subdirs: Vec<&str> = match doc_type.as_deref() {
+        Some(t) => vec![t],
+        None => vec!["planned", "current", "decisions", "shipped"],
+    };
+
+    let mut results: Vec<SearchResult> = Vec::new();
+    let q_lower = query.to_lowercase();
+
+    for curaye_path in &curaye_paths {
+        let project_id = std::path::Path::new(curaye_path)
+            .parent()
+            .and_then(|p| p.file_name())
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        for subdir in &subdirs {
+            let folder = std::path::Path::new(curaye_path).join(subdir);
+            let Ok(mut entries) = tokio::fs::read_dir(&folder).await else { continue };
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
+                let Ok(content) = tokio::fs::read_to_string(&path).await else { continue };
+                if !content.to_lowercase().contains(&q_lower) { continue; }
+
+                let title = content.lines()
+                    .find(|l| l.starts_with("title:"))
+                    .map(|l| l.trim_start_matches("title:").trim().to_string())
+                    .unwrap_or_default();
+
+                let snippet_start = content.to_lowercase().find(&q_lower).unwrap_or(0);
+                let start = snippet_start.saturating_sub(40);
+                let end = (snippet_start + q_lower.len() + 80).min(content.len());
+                let snippet = content[start..end].replace('\n', " ").trim().to_string();
+
+                results.push(SearchResult {
+                    project_id: project_id.clone(),
+                    doc_type: subdir.to_string(),
+                    title,
+                    file_path: path.to_string_lossy().to_string(),
+                    snippet,
+                    score: 0.0,
+                });
+            }
+        }
+    }
+
+    Ok(results)
 }

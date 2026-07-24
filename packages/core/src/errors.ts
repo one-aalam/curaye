@@ -19,6 +19,13 @@ export class SharedLayerError extends Error {
   }
 }
 
+export class SearchIndexError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SearchIndexError'
+  }
+}
+
 export class DocumentWriteError extends Error {
   constructor(path: string, cause: unknown) {
     super(`Failed to write document at: ${path}`)

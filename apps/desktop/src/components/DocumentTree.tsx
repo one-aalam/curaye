@@ -9,6 +9,7 @@ import { useViewStore } from "@/stores/viewStore";
 import { useBriefStore } from "@/stores/briefStore";
 import { PromoteModal } from "@/components/PromoteModal";
 import { MenuRoot, MenuContent, MenuItem } from "@/components/ui/menu";
+import { SearchBar } from "@/components/SearchBar";
 
 const STATUS_DOT: Record<string, string> = {
   draft: "bg-zinc-400",
@@ -438,6 +439,7 @@ export function DocumentTree() {
   return (
     <div className="flex flex-col h-full">
       <TreePanelHeader />
+      <SearchBar />
       <ReentryBanner />
       <div className="flex-1 overflow-y-auto py-1">
         {sections.map((section) => {

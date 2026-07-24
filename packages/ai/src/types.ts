@@ -17,9 +17,15 @@ export interface Provider {
   readonly defaultModel: string
 }
 
+export interface EmbedConfig {
+  provider: 'ollama' | 'openai'
+  model: string
+}
+
 export interface AiConfig {
   provider: 'ollama' | 'anthropic' | 'openai'
   ollama?:    { baseUrl: string; model: string }
   anthropic?: { apiKey: string; model: string }
   openai?:    { apiKey: string; model: string }
+  embed?:     EmbedConfig
 }

@@ -6,6 +6,8 @@ export interface AiProviderConfig {
   apiKey?: string;
   model: string;
   baseUrl?: string;
+  embedProvider?: "ollama" | "openai";
+  embedModel?: string;
 }
 
 export interface AiMessage {
@@ -15,6 +17,42 @@ export interface AiMessage {
 
 export async function fetchAiConfig(): Promise<AiProviderConfig | null> {
   return invoke<AiProviderConfig | null>("get_ai_config");
+}
+
+export async function fetchEmbedding(
+  config: AiProviderConfig,
+  text: string,
+): Promise<number[]> {
+  const provider = config.embedProvider ?? (config.kind !== "anthropic" ? config.kind : null);
+  const model = config.embedModel ?? config.model;
+
+  if (provider === "ollama") {
+    const baseUrl = (config.baseUrl ?? "http://localhost:11434").replace(/\/$/, "");
+    const res = await fetch(`${baseUrl}/api/embeddings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt: text }),
+    });
+    if (!res.ok) throw new Error(`Ollama embed failed: HTTP ${res.status}`);
+    const data = await res.json() as { embedding: number[] };
+    return data.embedding;
+  }
+
+  if (provider === "openai") {
+    const res = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey ?? ""}`,
+      },
+      body: JSON.stringify({ model, input: text }),
+    });
+    if (!res.ok) throw new Error(`OpenAI embed failed: HTTP ${res.status}`);
+    const data = await res.json() as { data: Array<{ embedding: number[] }> };
+    return data.data[0]?.embedding ?? [];
+  }
+
+  throw new Error("No embedding provider available (Anthropic does not support embeddings)");
 }
 
 type StreamEvent =

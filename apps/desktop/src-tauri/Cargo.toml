@@ -27,6 +27,8 @@ tokio = { version = "1", features = ["full"] }
 dirs = "5"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+usearch = "2"
+base64 = "0.22"
 
 [profile.release]
 panic = "abort"

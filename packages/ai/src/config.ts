@@ -12,6 +12,7 @@ interface RawConfig {
     ollama?:    { baseUrl?: string; model?: string }
     anthropic?: { apiKey?: string; model?: string }
     openai?:    { apiKey?: string; model?: string }
+    embed?:     { provider?: string; model?: string }
   }
 }
 
@@ -25,6 +26,13 @@ export async function readAiConfig(): Promise<AiConfig | null> {
     const provider = ai.provider as AiConfig['provider']
     if (provider !== 'ollama' && provider !== 'anthropic' && provider !== 'openai') return null
 
+    const embedProvider = ai.embed?.provider
+    const embedModel = ai.embed?.model
+    const embedConfig: AiConfig['embed'] =
+      (embedProvider === 'ollama' || embedProvider === 'openai') && embedModel
+        ? { provider: embedProvider, model: embedModel }
+        : undefined
+
     return {
       provider,
       ...(ai.ollama?.baseUrl && ai.ollama.model
@@ -36,6 +44,7 @@ export async function readAiConfig(): Promise<AiConfig | null> {
       ...(ai.openai?.apiKey && ai.openai.model
         ? { openai: { apiKey: ai.openai.apiKey, model: ai.openai.model } }
         : {}),
+      ...(embedConfig !== undefined ? { embed: embedConfig } : {}),
     }
   } catch {
     return null

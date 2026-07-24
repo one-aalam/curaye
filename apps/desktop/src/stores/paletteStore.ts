@@ -4,6 +4,7 @@ import { fetchAiConfig, streamCompletion, type AiProviderConfig, type AiMessage 
 import { useProjectStore } from "@/stores/projectStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
+import { useSearchStore } from "@/stores/searchStore";
 
 export type PalettePhase = "input" | "streaming" | "diff";
 
@@ -364,6 +365,13 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
 
     const action = resolveAction(query);
     const context = gatherContext();
+
+    // Semantic search bypasses streaming — hands off to the search panel
+    if (action.type === "semantic-search" && action.param) {
+      get().closePalette();
+      void useSearchStore.getState().runSearch(action.param);
+      return;
+    }
 
     set({
       resolvedAction: action,

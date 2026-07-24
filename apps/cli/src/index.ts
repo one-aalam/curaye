@@ -23,6 +23,7 @@ import { registerRelease } from './commands/release.js'
 import { registerBrief } from './commands/brief.js'
 import { registerCheck } from './commands/check.js'
 import { registerSkill } from './commands/skill.js'
+import { registerIndexCmd } from './commands/index-cmd.js'
 
 const program = new Command()
 
@@ -58,6 +59,7 @@ registerRelease(program)
 registerBrief(program)
 registerCheck(program)
 registerSkill(program)
+registerIndexCmd(program)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   process.stderr.write((err instanceof Error ? err.message : String(err)) + '\n')

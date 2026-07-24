@@ -30,3 +30,28 @@ export function createProvider(config: AiConfig): Provider {
     }
   }
 }
+
+export function createEmbedProvider(config: AiConfig): Provider | null {
+  const embed = config.embed
+  if (embed === undefined) {
+    // Fall back to the main provider if it supports embeddings (Ollama, OpenAI)
+    if (config.provider === 'ollama' && config.ollama !== undefined) {
+      return new OllamaProvider(config.ollama.baseUrl, config.ollama.model)
+    }
+    if (config.provider === 'openai' && config.openai !== undefined) {
+      return new OpenAIProvider(config.openai.apiKey, config.openai.model)
+    }
+    return null
+  }
+
+  switch (embed.provider) {
+    case 'ollama': {
+      if (config.ollama === undefined) return null
+      return new OllamaProvider(config.ollama.baseUrl, embed.model)
+    }
+    case 'openai': {
+      if (config.openai === undefined) return null
+      return new OpenAIProvider(config.openai.apiKey, embed.model)
+    }
+  }
+}

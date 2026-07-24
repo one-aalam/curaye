@@ -12,3 +12,14 @@ export { SharedLayer, SHARED_DIR, CATEGORIES } from './shared-layer.js'
 export type { SharedDocument, SharedNotification, SharedCategory, PromoteInput, PromoteResult } from './shared-layer.js'
 export { DriftDetector } from './drift-detector.js'
 export type { DriftFinding, DriftReport, DriftClassification } from './drift-detector.js'
+export { SearchIndexManager, INDEX_PATH } from './search-index.js'
+export type {
+  EmbedFn,
+  DocToIndex,
+  IndexableDocType,
+  SearchResult,
+  SearchOpts,
+  IndexStatus,
+  BuildStats,
+} from './search-index.js'
+export { SearchIndexError } from './errors.js'
