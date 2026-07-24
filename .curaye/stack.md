@@ -1,5 +1,5 @@
 ---
-updated: 2026-07-21
+updated: 2026-07-24
 ---
 
 # Stack
@@ -24,6 +24,7 @@ updated: 2026-07-21
 - **Frontend:** React 19, Vite, Tailwind CSS v4
 - **UI primitives:** Base UI (`@base-ui/react`)
 - **State:** Zustand
+- **Vector search (Rust):** `usearch` crate — reads the same `~/.curaye/index/index.usearch` binary produced by the CLI; no conversion step required
 
 ## apps/web
 
@@ -36,6 +37,7 @@ updated: 2026-07-21
 - **File system:** Node.js `fs/promises` — no abstraction layer
 - **Schema validation:** Zod 3.x
 - **Date handling:** Native `Temporal` API (Node 20+)
+- **Vector indexing:** `usearch` (`@unum-cloud/usearch`) — HNSW index with pre-built native bindings; produces `~/.curaye/index/index.usearch` readable by both Node.js and the Rust Tauri layer
 
 ## packages/protocol
 

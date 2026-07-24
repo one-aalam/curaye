@@ -2,7 +2,7 @@
 id: desktop
 title: Desktop App
 domain: desktop
-updated: 2026-07-23
+updated: 2026-07-24
 ---
 
 # Desktop App
@@ -57,6 +57,9 @@ Three resizable panels separated by drag-handle dividers. Widths are persisted i
 | `set_last_opened` | Write today's date for a project to `~/.curaye/desktop-state.json` |
 | `promote_to_shared` | Promote a `current/` or `decisions/` document to `~/.curaye/shared/<category>/<id>.md`. Injects `source_project`, `promoted`, `adopted_by` frontmatter; notifies other registered projects; optionally adds `promoted_to` to the source. Errors if source is from `planned/` or category is invalid. Returns `PromoteSharedResult { sharedPath, docRef, isUpdate, projectsNotified }`. |
 | `check_project_drift` | Count unresolved drift findings for a project. Reads the project's `adopts` list from the registry; for each adopted doc, checks whether the review snapshot differs from the current shared doc (pending update), whether any local decision has `superseded_by` matching the ref (intentional override), and runs keyword-term extraction for text-level drift. Returns a `u32` count of `drift` + `pending-update` findings not present in `~/.curaye/drift-ignores.yaml`. Used to populate the sidebar badge. |
+| `search_index_status` | Check whether `~/.curaye/index/index.usearch` and `manifest.json` exist. Returns `{ exists: bool }`. |
+| `search_semantic` | Query the usearch HNSW index with a pre-computed embedding vector. Accepts `queryVector: f32[]`, optional `projectId: string \| null`, optional `docType: string \| null`, and `limit: number`. Returns `Vec<SearchHit>` sorted by cosine similarity descending. |
+| `search_keyword` | `grep -ri` fallback across an array of `.curaye/` paths. Accepts `query: string`, `curayePaths: string[]`, optional `docType: string \| null`. Returns `Vec<SearchHit>` with score `0`. |
 
 All file writes use atomic `write_atomic` (write `.tmp`, then `fs::rename`).
 
@@ -79,10 +82,12 @@ Grants `core:default`, `core:event:allow-listen`, `core:event:allow-unlisten`, `
 | `useBacklogStore` | Aggregated planned specs from all registered projects, filter/sort state, `updateStatus` / `shelveSpec` / `openSpec` actions |
 | `useReleaseStore` | Release detail (id, title, status, target, specs) for the currently open kanban; `loadRelease`, `updateSpecStatus`, `shipRelease` actions |
 | `useBriefStore` | Brief state: `active` (whether BriefView is showing), `streaming`, `content` (accumulated text), `context` (`BriefContext` from backend), `suggestedSpecPath` for "Start working", `isDormant` (project not opened >30 days), `lastOpenedDate`. Actions: `generateBrief` (calls backend, then either builds deterministic brief or streams via `start_ai_stream`), `cancelBrief`, `saveBrief`, `closeBrief`, `loadLastOpened`, `recordOpened`. |
+| `useSearchStore` | Search state: `query`, `hits: SearchHit[]`, `loading`, `mode` (`semantic \| keyword \| none`), `stale` (keyword results contain paths not in the semantic index), `allProjects` (globe toggle), `active` (results panel visible), `typeFilter: string \| undefined` (currently selected doc-type filter chip). Actions: `setQuery`, `setAllProjects`, `setTypeFilter`, `runSearch` (embeds query via `fetchEmbedding`, calls `search_semantic`; falls back to `search_keyword` on embedding failure or missing index; sets `stale` when keyword results have uncovered paths), `clearSearch`. |
 
 ## Components (`src/components/`)
 
 - **`ProjectsSidebar`** — reads registry on mount; refreshes sync status (and drift counts) every 30 s; right-click context menu (Reveal in Finder / Sync now / Unlink); "Add project" triggers `pick_directory`. Footer contains "Backlog" toggle and `SettingsTrigger`. Each project row shows an amber dot (`bg-amber-400`) when `drift_count > 0`, with a tooltip showing the count.
+- **`SearchBar`** — sits at the top of the middle panel. Input row has a search icon, debounced text field (350 ms), a clear button, and a "All projects" globe toggle. When a search is active (`query.length > 0`), a chips row appears below the input with five type filters: All / Planned / Current / Decisions / Shipped — the active chip is highlighted in accent color; clicking re-runs the search with the selected `docType`. Below the chips, a scrollable results panel (max-height 272 px) shows `ResultItem` rows with title, project/type label, snippet, and a `ScoreBar` progress-bar for semantic scores. A stale-index notice appears in amber when `useSearchStore.stale` is true. `Escape` clears search and returns focus to the tree.
 - **`DocumentTree`** — renders a project name header with a "Brief" button (always visible; highlighted amber when the project is dormant), a `ReentryBanner` (shows when `isDormant` from `useBriefStore` — project not opened in >30 days — dismissed per-session), followed by `planned/`, `current/`, `shipped/`, `decisions/`, root docs, and a `releases/` section. Status-badge dots (draft=grey, ready=blue, building=amber, done=green, shelved=dim); draft items (`_` prefix) grouped under "Drafts" subsection; red `AlertCircle` on items with validation errors; `+` button per section creates a new document and focuses the `title` field. The `releases/` section shows per-release progress bars (`done/total`); shipped releases are collapsed under a "Shipped (N)" toggle by default; clicking a release sets `view = 'releases'` and opens `ReleaseView`. Right-clicking a `current/` or `decisions/` document opens a context menu with a "Promote to shared layer" item, which opens `PromoteModal`.
 - **`DocumentEditor`** — structured mode: segmented controls for status/effort/impact/desire, tag inputs for requires/tags, text inputs for release/created/updated; `updated` auto-fills to today on any field change. Raw mode: plain textarea for full file content. Mode switch round-trips via `serialize_document` / `parse_raw`. `⌘S` saves. Navigating away with unsaved changes shows a Save / Discard / Cancel prompt. Validation tray below editor lists errors and warnings; clicking an issue highlights the relevant field.
 - **`ResizablePanels`** — drag-handle dividers; clamps panel widths to sane min/max values.

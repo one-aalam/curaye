@@ -2,7 +2,7 @@
 id: core
 title: "@curaye/core — Project Scanner & Registry"
 domain: core
-updated: 2026-07-23
+updated: 2026-07-24
 ---
 
 # @curaye/core — Project Scanner & Registry
@@ -249,6 +249,65 @@ interface DriftReport {
 4. Run `computeTermDrift`: extract key technology terms from the shared doc body (alphanumeric tokens >2 chars, excluding common English words) and check their presence in local `stack.md`, `decisions/`, and `current/` content. Significant missing terms → `drift`.
 
 `countDrift()` returns only `drift`-classified finding count (not `pending-update`), for use as a badge threshold. `clearIgnores()` is called by `curaye sync` after each successful push or pull.
+
+## `SearchIndexManager`
+
+Builds and queries a local HNSW vector index at `~/.curaye/index/` using the `usearch` npm package. A companion `manifest.json` maps uint64 keys to document metadata and stores content hashes (SHA-256, first 16 hex chars) and base64-encoded `Float32Array` vectors for incremental re-embedding.
+
+```ts
+class SearchIndexManager {
+  static async build(docs: DocToIndex[], embedFn: EmbedFn): Promise<BuildStats>
+  static async search(queryVector: number[], opts?: SearchOpts): Promise<SearchResult[]>
+  static async status(): Promise<IndexStatus>
+  static async indexExists(): Promise<boolean>
+  static async getIndexedPaths(): Promise<Set<string>>
+}
+
+type EmbedFn = (text: string) => Promise<number[]>
+type IndexableDocType = 'planned' | 'current' | 'decisions' | 'shipped'
+
+interface DocToIndex {
+  projectId: string
+  type:      IndexableDocType
+  title:     string
+  filePath:  string
+  body:      string
+}
+
+interface SearchResult {
+  projectId: string
+  type:      string
+  title:     string
+  filePath:  string
+  snippet:   string
+  score:     number   // cosine similarity in [0, 1]
+}
+
+interface SearchOpts {
+  projectId?: string
+  type?:      string
+  limit?:     number
+}
+
+interface IndexStatus {
+  exists:     boolean
+  indexedAt?: string
+  count?:     number
+  projects?:  string[]
+}
+
+interface BuildStats {
+  embedded: number
+  skipped:  number
+  total:    number
+}
+```
+
+`build()` is incremental: documents whose body content hash matches the stored hash are reused without re-embedding. The usearch binary (`index.usearch`) and `manifest.json` are written atomically (`.tmp` → rename). The index uses cosine distance, F32 quantization, HNSW connectivity 16, and dimensions derived from the first embedding produced. The same `index.usearch` file is readable by the Tauri Rust layer via the `usearch` crate — no conversion required.
+
+`search()` over-fetches candidates (`max(limit*10, 50)`) then applies `projectId` and `type` filters in-memory before returning `limit` results. Score is derived as `1 - cosine_distance`, clamped to `[0, 1]`.
+
+`INDEX_PATH = ~/.curaye/index/index.usearch` is exported so callers (Tauri, CLI) can reference the path directly.
 
 ## Error types
 

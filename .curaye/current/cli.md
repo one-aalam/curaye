@@ -2,7 +2,7 @@
 id: cli
 title: CLI — Command Surface
 domain: cli
-updated: 2026-07-23
+updated: 2026-07-24
 ---
 
 # CLI — Command Surface
@@ -71,11 +71,13 @@ Tracks `CLAUDE.md`, `AGENTS.md`, and `*AGENTS*.md` files across registered proje
 |---|---|
 | `curaye brief [--project <id>] [--no-ai] [--save]` | Generates a structured 6-section re-entry brief (Current State, What Was Planned, Where You Left Off, Decisions to Revisit, Suggested First Step, Vision Check) from the project's `.curaye/` contents. With AI configured, streams prose to stdout; `--no-ai` forces deterministic output from structured data alone. `--save` writes the output to `.curaye/briefs/YYYY-MM-DD.md` (not tracked by the protocol scanner). Falls back to deterministic output automatically when no AI provider is configured. |
 
-## Search
+## Search and indexing
 
 | Command | Description |
 |---|---|
-| `curaye search <query> [--project <id>] [--type planned\|current\|decisions\|shipped]` | Keyword search across `.curaye/` documents. Searches all registered projects when `--project` is omitted. Falls back to keyword if AI not configured. |
+| `curaye index [--project <id>] [--all]` | Builds or incrementally updates the local vector index at `~/.curaye/index/`. Only re-embeds documents whose content hash has changed. When `--all` is passed, also indexes shared-layer documents from `~/.curaye/shared/` (projectId `"shared"`). Requires an embedding provider (Ollama `nomic-embed-text`, Anthropic, or OpenAI). |
+| `curaye index status` | Shows index coverage: document count, last-indexed timestamp, and which project ids are present in the index. |
+| `curaye search <query> [--project <id>] [--type planned\|current\|decisions\|shipped] [--limit N]` | Semantic search when an AI provider is configured and the index exists; falls back to `grep -ri` keyword search otherwise. Prints a stale-index notice when keyword results contain documents missing from the semantic index. Searches all registered projects and the shared layer when `--project` is omitted. |
 
 ## AI-assisted commands
 
