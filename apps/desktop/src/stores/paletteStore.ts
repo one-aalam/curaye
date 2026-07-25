@@ -4,7 +4,7 @@ import { fetchAiConfig, streamCompletion, type AiProviderConfig, type AiMessage 
 import { useProjectStore } from "@/stores/projectStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
-import { useSearchStore } from "@/stores/searchStore";
+import { useSearchStore, type SearchHit } from "@/stores/searchStore";
 
 export type PalettePhase = "input" | "streaming" | "diff";
 
@@ -51,7 +51,13 @@ function resolveAction(query: string): ResolvedAction {
   }
 
   if (/generate\s+ac/.test(q) || /acceptance\s+criteria/.test(q)) {
-    return { type: "generate-ac" };
+    const stripped = query.trim()
+      .replace(/generate\s+acceptance\s+criteria\s+for\s*/i, "")
+      .replace(/generate\s+acceptance\s+criteria\s*/i, "")
+      .replace(/generate\s+ac\s+for\s*/i, "")
+      .replace(/generate\s+ac\s*/i, "")
+      .trim();
+    return stripped ? { type: "generate-ac", param: stripped } : { type: "generate-ac" };
   }
 
   return { type: "generic", param: query.trim() };
@@ -93,9 +99,9 @@ function buildMessages(action: ResolvedAction, context: PaletteContext): AiMessa
       const id = slugify(title);
       msgs.push({
         role: "user",
-        content: `Generate a complete Curaye spec document for: "${title}".
+        content: `Generate a Curaye spec for: "${title}".
 
-Use this exact format (fill in all sections with meaningful content):
+Respond with ONLY the file content below — no code fences, no intro text, no title heading in the body. Keep the frontmatter exactly as shown.
 
 ---
 id: ${id}
@@ -108,8 +114,6 @@ created: ${today}
 updated: ${today}
 ---
 
-# ${title}
-
 ## Problem
 
 ## Goal
@@ -120,7 +124,7 @@ updated: ${today}
 
 1.
 
-Write the full spec now. Be specific and practical.`,
+Fill in every body section now with specific, practical content for "${title}".`,
       });
       break;
     }
@@ -146,9 +150,14 @@ Write the full spec now. Be specific and practical.`,
     }
 
     case "semantic-search": {
+      const hitSummary = context.searchHits.length > 0
+        ? context.searchHits
+            .map((h) => `- **${h.title}** (${h.type})${h.snippet ? `: ${h.snippet}` : ""}`)
+            .join("\n")
+        : "No matching documents found.";
       msgs.push({
         role: "user",
-        content: `I need to find where this problem was previously solved: "${action.param ?? ""}". Based on typical software project patterns, describe where in a spec/decision/current document one might look, and what keywords to search for.`,
+        content: `I want to find where I previously solved: "${action.param ?? ""}"\n\nSearch results from my project docs:\n${hitSummary}\n\nWhich documents are most relevant and what solution or approach do they describe? If the results don't match, say so clearly.`,
       });
       break;
     }
@@ -162,15 +171,20 @@ Write the full spec now. Be specific and practical.`,
     }
 
     case "generate-ac": {
-      if (context.openDocContent) {
+      if (action.param) {
         msgs.push({
           role: "user",
-          content: `Generate detailed acceptance criteria for the following spec. Add them as a numbered list under "## Acceptance criteria". Return only the acceptance criteria list, not the whole spec.\n\n${context.openDocContent}`,
+          content: `Generate detailed, testable acceptance criteria for: "${action.param}". Return a numbered list only — no preamble.`,
+        });
+      } else if (context.openDocContent) {
+        msgs.push({
+          role: "user",
+          content: `Generate detailed acceptance criteria for the following spec. Return only the acceptance criteria as a numbered list under "## Acceptance criteria".\n\n${context.openDocContent}`,
         });
       } else {
         msgs.push({
           role: "user",
-          content: "No document is open. Open a spec document first.",
+          content: "No document is open and no feature was specified. Use 'Generate acceptance criteria for [feature name]' or open a spec first.",
         });
       }
       break;
@@ -194,6 +208,7 @@ export interface PaletteContext {
   openDocId: string | null;
   openDocPath: string | null;
   openDocContent: string | null;
+  searchHits: SearchHit[];
 }
 
 function gatherContext(): PaletteContext {
@@ -214,6 +229,7 @@ function gatherContext(): PaletteContext {
     openDocId,
     openDocPath: editorState.currentPath,
     openDocContent: editorState.document?.raw ?? null,
+    searchHits: [],
   };
 }
 
@@ -366,13 +382,6 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
     const action = resolveAction(query);
     const context = gatherContext();
 
-    // Semantic search bypasses streaming — hands off to the search panel
-    if (action.type === "semantic-search" && action.param) {
-      get().closePalette();
-      void useSearchStore.getState().runSearch(action.param);
-      return;
-    }
-
     set({
       resolvedAction: action,
       phase: "streaming",
@@ -381,13 +390,21 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
     });
 
     if (!aiConfig) {
-      // Should not happen as UI guards against this, but just in case
       set({ error: "AI is not configured." });
       return;
     }
 
     const controller = new AbortController();
     set({ _abortController: controller });
+
+    // For semantic search: run search silently first to gather context for the AI
+    let searchHits: SearchHit[] = [];
+    if (action.type === "semantic-search" && action.param) {
+      await useSearchStore.getState().runSearch(action.param);
+      searchHits = useSearchStore.getState().hits.slice(0, 8);
+      // Clear sidebar search state — results go into the palette, not the sidebar
+      useSearchStore.getState().clearSearch();
+    }
 
     // For update-current, grab the original text now
     const originalText = context.openDocContent ?? null;
@@ -406,7 +423,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
     }
     set({ targetPath });
 
-    const messages = buildMessages(action, context);
+    const messages = buildMessages(action, { ...context, searchHits });
 
     try {
       for await (const token of streamCompletion(aiConfig, messages, controller.signal)) {

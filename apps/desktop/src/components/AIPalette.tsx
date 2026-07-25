@@ -11,13 +11,21 @@ import { MarkdownContent } from "@/components/ui/markdown";
 
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
-const SUGGESTIONS = [
-  "Draft a spec",
-  "Re-entry brief for current project",
-  "Update current/ from shipped spec",
-  "Detect drift in this project",
-  "Find where I solved this before",
-  "Generate acceptance criteria",
+interface Suggestion {
+  label: string;
+  /** Pre-fill the input with this prefix and wait for the user to complete it. */
+  expandWith?: string;
+  /** Ghost hint shown after the label and used as input placeholder after expansion. */
+  hint?: string;
+}
+
+const SUGGESTIONS: Suggestion[] = [
+  { label: "Draft a spec", expandWith: "Draft a spec for ", hint: "feature name…" },
+  { label: "Re-entry brief for current project" },
+  { label: "Update current/ from shipped spec" },
+  { label: "Detect drift in this project" },
+  { label: "Find where I solved this before", expandWith: "Find where I solved ", hint: "problem or topic…" },
+  { label: "Generate acceptance criteria", expandWith: "Generate acceptance criteria for ", hint: "spec name or feature…" },
 ];
 
 // ── Input phase ───────────────────────────────────────────────────────────────
@@ -44,6 +52,25 @@ function InputPhase() {
     setActiveIndex(-1);
   }, [query]);
 
+  // Derive a contextual placeholder from whichever expandWith prefix is active
+  const expandedHint = SUGGESTIONS.find((s) => s.expandWith && query === s.expandWith)?.hint;
+  const placeholder = expandedHint ?? "What do you want to do?";
+
+  const activateSuggestion = useCallback(
+    (s: Suggestion) => {
+      if (s.expandWith) {
+        // Parameterized: pre-fill the prefix and let the user type the rest
+        setQuery(s.expandWith);
+        requestAnimationFrame(() => inputRef.current?.focus());
+      } else {
+        // Immediate: set query and execute
+        setQuery(s.label);
+        void execute();
+      }
+    },
+    [setQuery, execute],
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -55,7 +82,7 @@ function InputPhase() {
       e.preventDefault();
       if (activeIndex >= 0) {
         const s = SUGGESTIONS[activeIndex];
-        if (s) { setQuery(s); void execute(); }
+        if (s) activateSuggestion(s);
       } else if (query.trim()) {
         void execute();
       }
@@ -65,13 +92,13 @@ function InputPhase() {
   return (
     <div>
       <div className="flex items-center gap-2 px-4 py-3 border-b border-(--glass-border)">
-        <Search size={14} className="text-muted-foreground flex-shrink-0" />
+        <Search size={14} className="text-muted-foreground shrink-0" />
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="What do you want to do?"
+          placeholder={placeholder}
           className={cn(
             "flex-1 bg-transparent text-sm outline-none",
             "placeholder:text-muted-foreground/50",
@@ -93,11 +120,12 @@ function InputPhase() {
         <div ref={listRef} className="space-y-0.5">
           {SUGGESTIONS.map((s, idx) => {
             const isActive = idx === activeIndex;
+            const isParameterized = !!s.expandWith;
             return (
               <button
-                key={s}
+                key={s.label}
                 type="button"
-                onClick={() => { setQuery(s); void execute(); }}
+                onClick={() => activateSuggestion(s)}
                 onMouseEnter={() => setActiveIndex(idx)}
                 className={cn(
                   "flex items-center gap-2 w-full rounded-md px-3 py-1.5 text-sm text-left transition-colors",
@@ -109,13 +137,27 @@ function InputPhase() {
                 <Sparkles
                   size={12}
                   className={cn(
-                    "flex-shrink-0 transition-colors",
+                    "shrink-0 transition-colors",
                     isActive ? "text-primary" : "text-muted-foreground",
                   )}
                 />
-                <span className="flex-1">{s}</span>
+                <span className="flex-1 flex items-baseline gap-1.5 min-w-0">
+                  <span className="shrink-0">{s.label}</span>
+                  {s.hint && (
+                    <span
+                      className={cn(
+                        "text-[11px] truncate transition-colors",
+                        isActive ? "text-primary/35" : "text-muted-foreground/25",
+                      )}
+                    >
+                      {s.hint}
+                    </span>
+                  )}
+                </span>
                 {isActive && (
-                  <kbd className="text-[10px] text-primary/60 font-mono">↵</kbd>
+                  <kbd className="text-[10px] text-primary/60 font-mono shrink-0">
+                    {isParameterized ? "→" : "↵"}
+                  </kbd>
                 )}
               </button>
             );
@@ -151,7 +193,9 @@ function StreamingPhase() {
             ? "Detecting drift"
             : resolvedAction?.type === "generate-ac"
               ? "Generating acceptance criteria"
-              : "Processing";
+              : resolvedAction?.type === "semantic-search"
+                ? `Finding: "${resolvedAction.param ?? ""}"`
+                : "Processing";
 
   return (
     <div className="flex flex-col h-full">
@@ -192,7 +236,7 @@ function StreamingPhase() {
             onClick={() => void saveOutput()}
             className="px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
           >
-            Save to planned/
+            Save draft
           </button>
         )}
         {!isStreaming && resolvedAction?.type !== "draft-spec" && (
