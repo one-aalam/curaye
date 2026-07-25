@@ -1,53 +1,10 @@
 import { useEffect, useCallback, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Pencil, Eye, Check, ChevronDown as ChevronDownIcon } from "lucide-react";
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Pencil, Eye, Check, ChevronDown as ChevronDownIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorMode, type ValidationIssue } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
 import { TabsRoot, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
 import { MarkdownContent } from "@/components/ui/markdown";
-
-// ── Segmented control ─────────────────────────────────────────────────────────
-
-function SegmentedControl({
-  options,
-  value,
-  onChange,
-  field,
-}: {
-  options: string[];
-  value: string | undefined;
-  onChange: (v: string) => void;
-  field: string;
-}) {
-  const activeField = useEditorStore((s) => s.activeIssueField);
-  const isHighlighted = activeField === field;
-
-  return (
-    <div
-      className={cn(
-        "flex gap-0.5 rounded-md p-0.5",
-        "bg-muted/50 border border-border/50",
-        isHighlighted && "ring-2 ring-destructive",
-      )}
-    >
-      {options.map((opt) => (
-        <button
-          key={opt}
-          type="button"
-          onClick={() => onChange(opt)}
-          className={cn(
-            "rounded px-2 py-0.5 text-[10px] capitalize transition-colors",
-            value === opt
-              ? "bg-primary/15 text-primary font-medium"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {opt}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ── Tag input ─────────────────────────────────────────────────────────────────
 
@@ -161,12 +118,6 @@ function TextInput({
   );
 }
 
-// ── Structured form ───────────────────────────────────────────────────────────
-
-const STATUS_OPTIONS = ["draft", "ready", "building", "done", "shelved"];
-const EFFORT_OPTIONS = ["xs", "s", "m", "l", "xl"];
-const LEVEL_OPTIONS = ["low", "medium", "high"];
-
 // ── Read-only date field ──────────────────────────────────────────────────────
 
 function DateField({ value, label }: { value: string | undefined; label: string }) {
@@ -200,7 +151,6 @@ function SpecIdSelect({
   const [filter, setFilter] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Derive spec IDs from the planned section of the tree
   const plannedIds = (tree?.planned ?? [])
     .map((n) => n.name.replace(/\.md$/, "").replace(/^_/, ""))
     .filter((id) => id.length > 0);
@@ -260,7 +210,7 @@ function SpecIdSelect({
       </div>
 
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-20 rounded-md border border-border/50 bg-card shadow-lg overflow-hidden">
+        <div className="absolute top-full left-0 right-0 mt-1 z-30 rounded-md border border-border/60 bg-card shadow-xl overflow-hidden">
           <div className="p-1.5 border-b border-border/30">
             <input
               autoFocus
@@ -301,57 +251,315 @@ function SpecIdSelect({
   );
 }
 
-// ── Body editor: markdown preview with edit toggle ────────────────────────────
+// ── Doc section detection ─────────────────────────────────────────────────────
+
+function getDocSection(path: string | null): "planned" | "other" {
+  if (!path) return "other";
+  return /[/\\]\.curaye[/\\]planned[/\\]/.test(path) ? "planned" : "other";
+}
+
+// ── Compact select (for panel fields with many options) ───────────────────────
+
+function CompactSelect({
+  options,
+  value,
+  onChange,
+  field,
+  placeholder,
+}: {
+  options: string[];
+  value: string | undefined;
+  onChange: (v: string) => void;
+  field: string;
+  placeholder?: string;
+}) {
+  const activeField = useEditorStore((s) => s.activeIssueField);
+  const isHighlighted = activeField === field;
+
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "w-full rounded-md px-2 py-1 text-[10px] bg-muted/30 border border-border/50",
+        "focus:outline-none focus:border-ring/50 transition-colors capitalize cursor-pointer",
+        "text-foreground appearance-none",
+        isHighlighted && "ring-2 ring-destructive",
+      )}
+    >
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map((opt) => (
+        <option key={opt} value={opt} className="capitalize">
+          {opt}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ── Status badge colors ───────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  draft: "text-muted-foreground bg-muted/60",
+  ready: "text-blue-400 bg-blue-400/10",
+  building: "text-amber-400 bg-amber-400/10",
+  done: "text-emerald-400 bg-emerald-400/10",
+  shelved: "text-muted-foreground/40 bg-muted/30",
+};
+
+const STATUS_OPTIONS = ["draft", "ready", "building", "done", "shelved"];
+const EFFORT_OPTIONS = ["xs", "s", "m", "l", "xl"];
+const LEVEL_OPTIONS = ["low", "medium", "high"];
+
+// ── Metadata strip ────────────────────────────────────────────────────────────
+
+function MetadataStrip({ onEdit }: { onEdit: () => void }) {
+  const doc = useEditorStore((s) => s.document);
+  if (!doc) return null;
+
+  const fm = doc.frontmatter;
+  const status = fm.status as string | undefined;
+  const effort = fm.effort as string | undefined;
+  const impact = fm.impact as string | undefined;
+  const desire = fm.desire as string | undefined;
+  const tags = (fm.tags as string[] | undefined) ?? [];
+
+  const hasAnyMeta = status ?? effort ?? impact ?? desire ?? tags.length > 0;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30 flex-shrink-0 min-h-[30px]">
+      {status && (
+        <span
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-medium capitalize",
+            STATUS_COLORS[status] ?? "text-muted-foreground bg-muted/50",
+          )}
+        >
+          {status}
+        </span>
+      )}
+      {effort && (
+        <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums">{effort}</span>
+      )}
+      {impact && (
+        <span className="text-[10px] text-muted-foreground/50">
+          <span className="text-muted-foreground/25 mr-0.5">impact</span>{impact}
+        </span>
+      )}
+      {desire && (
+        <span className="text-[10px] text-muted-foreground/50">
+          <span className="text-muted-foreground/25 mr-0.5">desire</span>{desire}
+        </span>
+      )}
+      {tags.slice(0, 4).map((tag) => (
+        <span key={tag} className="text-[10px] text-primary/50">#{tag}</span>
+      ))}
+      {tags.length > 4 && (
+        <span className="text-[10px] text-muted-foreground/30">+{tags.length - 4}</span>
+      )}
+      {!hasAnyMeta && (
+        <span className="text-[10px] text-muted-foreground/30 italic">No metadata</span>
+      )}
+      <button
+        type="button"
+        onClick={onEdit}
+        className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+      >
+        <Pencil size={9} />
+        Edit metadata
+      </button>
+    </div>
+  );
+}
+
+// ── Metadata panel (slide-in overlay) ────────────────────────────────────────
+
+function MetadataPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const doc = useEditorStore((s) => s.document);
+  const updateFrontmatter = useEditorStore((s) => s.updateFrontmatter);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  if (!doc) return null;
+  const fm = doc.frontmatter;
+
+  return (
+    <div
+      style={{ backgroundColor: "var(--card)" }}
+      className={cn(
+        "absolute top-0 right-0 bottom-0 z-20 w-60 flex flex-col",
+        "border-l border-border/60 shadow-xl",
+        "transition-transform duration-200 ease-out",
+        open ? "translate-x-0" : "translate-x-full",
+      )}
+    >
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 flex-shrink-0">
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          Metadata
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-muted-foreground/40 hover:text-foreground transition-colors"
+        >
+          <X size={12} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <FieldRow label="title">
+          <TextInput
+            field="title"
+            value={fm.title as string | undefined}
+            onChange={(v) => updateFrontmatter("title", v)}
+            placeholder="Untitled"
+          />
+        </FieldRow>
+
+        <FieldRow label="status">
+          <CompactSelect
+            field="status"
+            options={STATUS_OPTIONS}
+            value={fm.status as string | undefined}
+            onChange={(v) => updateFrontmatter("status", v)}
+            placeholder="— pick status"
+          />
+        </FieldRow>
+
+        <FieldRow label="effort">
+          <CompactSelect
+            field="effort"
+            options={EFFORT_OPTIONS}
+            value={fm.effort as string | undefined}
+            onChange={(v) => updateFrontmatter("effort", v)}
+            placeholder="— pick effort"
+          />
+        </FieldRow>
+
+        <FieldRow label="impact">
+          <CompactSelect
+            field="impact"
+            options={LEVEL_OPTIONS}
+            value={fm.impact as string | undefined}
+            onChange={(v) => updateFrontmatter("impact", v)}
+            placeholder="— pick impact"
+          />
+        </FieldRow>
+
+        <FieldRow label="desire">
+          <CompactSelect
+            field="desire"
+            options={LEVEL_OPTIONS}
+            value={fm.desire as string | undefined}
+            onChange={(v) => updateFrontmatter("desire", v)}
+            placeholder="— pick desire"
+          />
+        </FieldRow>
+
+        <FieldRow label="requires">
+          <SpecIdSelect
+            field="requires"
+            values={(fm.requires as string[] | undefined) ?? []}
+            onChange={(v) => updateFrontmatter("requires", v)}
+          />
+        </FieldRow>
+
+        <FieldRow label="tags">
+          <TagInput
+            field="tags"
+            values={(fm.tags as string[] | undefined) ?? []}
+            onChange={(v) => updateFrontmatter("tags", v)}
+            placeholder="tag…"
+          />
+        </FieldRow>
+
+        <FieldRow label="release">
+          <TextInput
+            field="release"
+            value={fm.release as string | undefined}
+            onChange={(v) => updateFrontmatter("release", v)}
+            placeholder="v1.0"
+          />
+        </FieldRow>
+
+        <div className="pt-2 border-t border-border/20 space-y-1.5">
+          <DateField label="created" value={fm.created as string | undefined} />
+          <DateField label="updated" value={fm.updated as string | undefined} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Body editor ───────────────────────────────────────────────────────────────
 
 function BodyEditor({
   value,
+  title,
+  onOpenMetadata,
   onChange,
 }: {
   value: string;
+  title?: string | undefined;
+  onOpenMetadata?: (() => void) | undefined;
   onChange: (v: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex items-center justify-between px-4 pt-3 pb-1 flex-shrink-0">
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-          Body
-        </span>
-        <button
-          type="button"
-          onClick={() => setEditing((v) => !v)}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
-        >
-          {editing ? <><Eye size={10} />Preview</> : <><Pencil size={10} />Edit</>}
-        </button>
-      </div>
-
       {editing ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          autoFocus
-          className={cn(
-            "flex-1 w-full px-4 pb-4 font-mono text-xs resize-none bg-transparent",
-            "focus:outline-none text-foreground/90",
-            "placeholder:text-muted-foreground/30",
-          )}
-          placeholder={"## Problem\n...\n\n## Goal\n..."}
-          spellCheck={false}
-        />
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-end px-4 pt-2 pb-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-foreground transition-colors"
+            >
+              <Eye size={10} />
+              Preview
+            </button>
+          </div>
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            autoFocus
+            className={cn(
+              "flex-1 w-full px-5 pb-6 font-mono text-xs resize-none bg-transparent",
+              "focus:outline-none text-foreground/90 placeholder:text-muted-foreground/30",
+            )}
+            placeholder={"## Problem\n...\n\n## Goal\n..."}
+            spellCheck={false}
+          />
+        </div>
       ) : (
         <div
-          className="flex-1 overflow-y-auto px-4 pb-4 cursor-text"
+          className="flex-1 overflow-y-auto px-5 pt-4 pb-6 cursor-text"
           onClick={() => setEditing(true)}
         >
+          {title && (
+            <h1
+              className={cn(
+                "text-base font-semibold text-foreground mb-4 leading-snug transition-colors",
+                onOpenMetadata && "cursor-pointer hover:text-primary/80",
+              )}
+              onClick={onOpenMetadata ? (e) => { e.stopPropagation(); onOpenMetadata(); } : undefined}
+              title={onOpenMetadata ? "Click to edit metadata" : undefined}
+            >
+              {title}
+            </h1>
+          )}
           {value.trim() ? (
             <MarkdownContent>{value}</MarkdownContent>
           ) : (
-            <p
-              className="text-xs text-muted-foreground/30 italic"
-              onClick={() => setEditing(true)}
-            >
+            <p className="text-xs text-muted-foreground/30 italic">
               Click to start writing…
             </p>
           )}
@@ -361,91 +569,40 @@ function BodyEditor({
   );
 }
 
-function StructuredForm() {
-  const { document, updateFrontmatter, updateBody } = useEditorStore();
-  if (!document) return null;
+// ── Structured view ───────────────────────────────────────────────────────────
 
-  const fm = document.frontmatter;
+function StructuredView() {
+  const doc = useEditorStore((s) => s.document);
+  const currentPath = useEditorStore((s) => s.currentPath);
+  const updateBody = useEditorStore((s) => s.updateBody);
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  const isPlannedSpec = getDocSection(currentPath) === "planned";
+
+  // Auto-open metadata panel in creation mode (empty body) — planned specs only
+  useEffect(() => {
+    if (isPlannedSpec && doc && !doc.body.trim()) {
+      setPanelOpen(true);
+    } else {
+      setPanelOpen(false);
+    }
+  }, [currentPath]); // reset per document, not on every body keystroke
+
+  if (!doc) return null;
+
+  const rawTitle = doc.frontmatter.title as string | undefined;
+  const title = isPlannedSpec && rawTitle ? rawTitle : undefined;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 space-y-3 border-b border-border/50 overflow-y-auto flex-shrink-0">
-        <FieldRow label="title">
-          <TextInput
-            field="title"
-            value={fm["title"] as string | undefined}
-            onChange={(v) => updateFrontmatter("title", v)}
-            placeholder="Untitled"
-          />
-        </FieldRow>
-
-        <FieldRow label="status">
-          <SegmentedControl
-            field="status"
-            options={STATUS_OPTIONS}
-            value={fm["status"] as string | undefined}
-            onChange={(v) => updateFrontmatter("status", v)}
-          />
-        </FieldRow>
-
-        <FieldRow label="effort">
-          <SegmentedControl
-            field="effort"
-            options={EFFORT_OPTIONS}
-            value={fm["effort"] as string | undefined}
-            onChange={(v) => updateFrontmatter("effort", v)}
-          />
-        </FieldRow>
-
-        <FieldRow label="impact">
-          <SegmentedControl
-            field="impact"
-            options={LEVEL_OPTIONS}
-            value={fm["impact"] as string | undefined}
-            onChange={(v) => updateFrontmatter("impact", v)}
-          />
-        </FieldRow>
-
-        <FieldRow label="desire">
-          <SegmentedControl
-            field="desire"
-            options={LEVEL_OPTIONS}
-            value={fm["desire"] as string | undefined}
-            onChange={(v) => updateFrontmatter("desire", v)}
-          />
-        </FieldRow>
-
-        <FieldRow label="requires">
-          <SpecIdSelect
-            field="requires"
-            values={(fm["requires"] as string[] | undefined) ?? []}
-            onChange={(v) => updateFrontmatter("requires", v)}
-          />
-        </FieldRow>
-
-        <FieldRow label="tags">
-          <TagInput
-            field="tags"
-            values={(fm["tags"] as string[] | undefined) ?? []}
-            onChange={(v) => updateFrontmatter("tags", v)}
-            placeholder="tag…"
-          />
-        </FieldRow>
-
-        <FieldRow label="release">
-          <TextInput
-            field="release"
-            value={fm["release"] as string | undefined}
-            onChange={(v) => updateFrontmatter("release", v)}
-            placeholder="v1.0"
-          />
-        </FieldRow>
-
-        <DateField label="created" value={fm["created"] as string | undefined} />
-        <DateField label="updated" value={fm["updated"] as string | undefined} />
-      </div>
-
-      <BodyEditor value={document.body} onChange={updateBody} />
+    <div className="relative flex flex-col h-full overflow-hidden">
+      {isPlannedSpec && <MetadataStrip onEdit={() => setPanelOpen(true)} />}
+      <BodyEditor
+        value={doc.body}
+        title={title}
+        onOpenMetadata={isPlannedSpec ? () => setPanelOpen(true) : undefined}
+        onChange={updateBody}
+      />
+      {isPlannedSpec && <MetadataPanel open={panelOpen} onClose={() => setPanelOpen(false)} />}
     </div>
   );
 }
@@ -667,7 +824,7 @@ export function DocumentEditor() {
 
       {/* Body */}
       <div className="flex-1 overflow-hidden">
-        {mode === "structured" ? <StructuredForm /> : <RawEditor />}
+        {mode === "structured" ? <StructuredView /> : <RawEditor />}
       </div>
 
       {/* Validation tray */}
