@@ -1,13 +1,14 @@
 import { useEffect, useCallback, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Pencil, Eye, Check, ChevronDown as ChevronDownIcon, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Pencil, Eye, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorMode, type ValidationIssue } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
 import { TabsRoot, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
 import { Select } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown";
+import { TagCombobox, MultiCombobox } from "@/components/ui/combobox";
 
-// ── Tag input ─────────────────────────────────────────────────────────────────
+// ── Tag field — thin wrapper that reads isHighlighted from store ──────────────
 
 function TagInput({
   values,
@@ -20,63 +21,14 @@ function TagInput({
   field: string;
   placeholder?: string;
 }) {
-  const activeField = useEditorStore((s) => s.activeIssueField);
-  const isHighlighted = activeField === field;
-  const [input, setInput] = useState("");
-
-  const addTag = (tag: string) => {
-    const trimmed = tag.trim();
-    if (trimmed && !values.includes(trimmed)) {
-      onChange([...values, trimmed]);
-    }
-    setInput("");
-  };
-
+  const isHighlighted = useEditorStore((s) => s.activeIssueField) === field;
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-1 rounded-md px-2 py-1 min-h-[26px]",
-        "border border-border/50 bg-muted/30 transition-colors",
-        "hover:border-border/80 focus-within:border-ring/60",
-        isHighlighted && "ring-2 ring-destructive",
-      )}
-      style={{ color: "var(--foreground)" }}
-    >
-      {values.map((tag) => (
-        <span
-          key={tag}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
-          style={{ backgroundColor: "color-mix(in srgb, var(--primary) 12%, transparent)", color: "var(--primary)" }}
-        >
-          {tag}
-          <button
-            type="button"
-            onClick={() => onChange(values.filter((v) => v !== tag))}
-            className="opacity-60 hover:opacity-100 leading-none"
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault();
-            addTag(input);
-          } else if (e.key === "Backspace" && input === "" && values.length > 0) {
-            onChange(values.slice(0, -1));
-          }
-        }}
-        onBlur={() => {
-          if (input.trim()) addTag(input);
-        }}
-        placeholder={values.length === 0 ? placeholder : undefined}
-        className="flex-1 min-w-16 bg-transparent text-[10px] outline-none placeholder:opacity-50"
-        style={{ color: "var(--foreground)" }}
-      />
-    </div>
+    <TagCombobox
+      values={values}
+      onChange={onChange}
+      placeholder={placeholder}
+      isHighlighted={isHighlighted}
+    />
   );
 }
 
@@ -138,7 +90,7 @@ function DateField({ value, label }: { value: string | undefined; label: string 
   );
 }
 
-// ── Spec ID multi-select ──────────────────────────────────────────────────────
+// ── Spec ID field — thin wrapper that reads store state ───────────────────────
 
 function SpecIdSelect({
   values,
@@ -149,128 +101,21 @@ function SpecIdSelect({
   onChange: (v: string[]) => void;
   field: string;
 }) {
-  const activeField = useEditorStore((s) => s.activeIssueField);
-  const isHighlighted = activeField === field;
+  const isHighlighted = useEditorStore((s) => s.activeIssueField) === field;
   const tree = useTreeStore((s) => s.tree);
-  const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const plannedIds = (tree?.planned ?? [])
+  const options = (tree?.planned ?? [])
     .map((n) => n.name.replace(/\.md$/, "").replace(/^_/, ""))
     .filter((id) => id.length > 0);
 
-  const filtered = filter
-    ? plannedIds.filter((id) => id.includes(filter.toLowerCase()))
-    : plannedIds;
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setFilter("");
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const toggle = (id: string) => {
-    onChange(values.includes(id) ? values.filter((v) => v !== id) : [...values, id]);
-  };
-
   return (
-    <div ref={containerRef} className="relative">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setOpen((o) => !o); }}
-        className={cn(
-          "flex flex-wrap items-center gap-1 w-full rounded-md px-2 py-1 min-h-[26px]",
-          "border border-border/50 bg-muted/30 cursor-default select-none",
-          "focus:outline-none transition-colors hover:border-border/80",
-          open && "border-ring/60",
-          isHighlighted && "ring-2 ring-destructive",
-        )}
-        style={{ color: "var(--foreground)" }}
-      >
-        {values.length === 0 && (
-          <span className="text-[10px]" style={{ color: "var(--muted-foreground)", opacity: 0.5 }}>none</span>
-        )}
-        {values.map((id) => (
-          <span
-            key={id}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
-            style={{ backgroundColor: "color-mix(in srgb, var(--primary) 12%, transparent)", color: "var(--primary)" }}
-          >
-            {id}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); toggle(id); }}
-              className="opacity-60 hover:opacity-100 leading-none"
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <ChevronDownIcon
-          size={10}
-          className={cn("ml-auto flex-shrink-0 transition-transform duration-150", open && "rotate-180")}
-          style={{ color: "var(--muted-foreground)", opacity: 0.5 }}
-        />
-      </div>
-
-      {open && (
-        <div
-          className="absolute top-full left-0 right-0 mt-1 z-50 rounded-md overflow-hidden"
-          style={{
-            backgroundColor: "color-mix(in srgb, var(--card) 90%, transparent)",
-            backdropFilter: "blur(var(--glass-blur, 12px))",
-            WebkitBackdropFilter: "blur(var(--glass-blur, 12px))",
-            boxShadow: "0 0 0 1px var(--glass-border), var(--glass-shadow)",
-          }}
-        >
-          <div className="p-1.5" style={{ borderBottom: "1px solid color-mix(in srgb, var(--border) 40%, transparent)" }}>
-            <input
-              autoFocus
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter spec ids…"
-              className="w-full text-[10px] bg-transparent outline-none"
-              style={{ color: "var(--foreground)" }}
-            />
-          </div>
-          <style>{`
-            .spec-id-item { color: var(--foreground); }
-            .spec-id-item:hover { background-color: color-mix(in srgb, var(--foreground) 8%, transparent); }
-            .spec-id-item.is-selected { color: var(--primary); }
-          `}</style>
-          <div className="max-h-40 overflow-y-auto py-1">
-            {filtered.length === 0 && (
-              <p className="px-2 py-1.5 text-[10px]" style={{ color: "var(--muted-foreground)", opacity: 0.5 }}>No matching specs</p>
-            )}
-            {filtered.map((id) => {
-              const selected = values.includes(id);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => toggle(id)}
-                  className={cn("spec-id-item flex items-center gap-2 w-full px-2 py-1.5 text-[10px] text-left cursor-default select-none outline-none transition-colors", selected && "is-selected")}
-                >
-                  <span className="w-3 flex-shrink-0 flex items-center" style={{ color: "var(--primary)" }}>
-                    {selected && <Check size={9} />}
-                  </span>
-                  {id}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
+    <MultiCombobox
+      options={options}
+      values={values}
+      onChange={onChange}
+      placeholder="none"
+      isHighlighted={isHighlighted}
+      emptyText="No matching specs"
+    />
   );
 }
 
