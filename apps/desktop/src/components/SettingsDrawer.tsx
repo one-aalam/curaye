@@ -69,7 +69,7 @@ function ThemeSection() {
             type="button"
             onClick={() => setUiFont(f.id)}
             className={cn(
-              "flex flex-col items-center gap-1 rounded-lg px-3 py-2 transition-colors border",
+              "flex flex-col items-center gap-1 rounded-lg px-3 py-2 transition-colors border w-16 text-balance",
               uiFont === f.id
                 ? "bg-primary/10 border-primary/40 text-primary"
                 : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
