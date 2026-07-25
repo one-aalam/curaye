@@ -35,15 +35,18 @@ function TagInput({
   return (
     <div
       className={cn(
-        "flex flex-wrap gap-1 rounded-md px-2 py-1 min-h-[28px]",
-        "bg-muted/30 border border-border/50 focus-within:border-ring/50 transition-colors",
+        "flex flex-wrap items-center gap-1 rounded-md px-2 py-1 min-h-[26px]",
+        "border border-border/50 bg-muted/30 transition-colors",
+        "hover:border-border/80 focus-within:border-ring/60",
         isHighlighted && "ring-2 ring-destructive",
       )}
+      style={{ color: "var(--foreground)" }}
     >
       {values.map((tag) => (
         <span
           key={tag}
-          className="flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary"
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
+          style={{ backgroundColor: "color-mix(in srgb, var(--primary) 12%, transparent)", color: "var(--primary)" }}
         >
           {tag}
           <button
@@ -70,7 +73,8 @@ function TagInput({
           if (input.trim()) addTag(input);
         }}
         placeholder={values.length === 0 ? placeholder : undefined}
-        className="flex-1 min-w-16 bg-transparent text-[10px] outline-none placeholder:text-muted-foreground/40"
+        className="flex-1 min-w-16 bg-transparent text-[10px] outline-none placeholder:opacity-50"
+        style={{ color: "var(--foreground)" }}
       />
     </div>
   );
@@ -184,18 +188,22 @@ function SpecIdSelect({
         onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setOpen((o) => !o); }}
         className={cn(
-          "flex flex-wrap gap-1 rounded-md px-2 py-1 min-h-[28px] cursor-pointer",
-          "bg-muted/30 border border-border/50 focus-within:border-ring/50 transition-colors",
+          "flex flex-wrap items-center gap-1 w-full rounded-md px-2 py-1 min-h-[26px]",
+          "border border-border/50 bg-muted/30 cursor-default select-none",
+          "focus:outline-none transition-colors hover:border-border/80",
+          open && "border-ring/60",
           isHighlighted && "ring-2 ring-destructive",
         )}
+        style={{ color: "var(--foreground)" }}
       >
         {values.length === 0 && (
-          <span className="text-[10px] text-muted-foreground/40 self-center">none</span>
+          <span className="text-[10px]" style={{ color: "var(--muted-foreground)", opacity: 0.5 }}>none</span>
         )}
         {values.map((id) => (
           <span
             key={id}
-            className="flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
+            style={{ backgroundColor: "color-mix(in srgb, var(--primary) 12%, transparent)", color: "var(--primary)" }}
           >
             {id}
             <button
@@ -207,23 +215,41 @@ function SpecIdSelect({
             </button>
           </span>
         ))}
-        <ChevronDownIcon size={10} className="ml-auto self-center text-muted-foreground/50" />
+        <ChevronDownIcon
+          size={10}
+          className={cn("ml-auto flex-shrink-0 transition-transform duration-150", open && "rotate-180")}
+          style={{ color: "var(--muted-foreground)", opacity: 0.5 }}
+        />
       </div>
 
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-30 rounded-md border border-border/60 bg-card shadow-xl overflow-hidden">
-          <div className="p-1.5 border-b border-border/30">
+        <div
+          className="absolute top-full left-0 right-0 mt-1 z-50 rounded-md overflow-hidden"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--card) 90%, transparent)",
+            backdropFilter: "blur(var(--glass-blur, 12px))",
+            WebkitBackdropFilter: "blur(var(--glass-blur, 12px))",
+            boxShadow: "0 0 0 1px var(--glass-border), var(--glass-shadow)",
+          }}
+        >
+          <div className="p-1.5" style={{ borderBottom: "1px solid color-mix(in srgb, var(--border) 40%, transparent)" }}>
             <input
               autoFocus
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Filter spec ids…"
-              className="w-full text-[10px] bg-transparent outline-none placeholder:text-muted-foreground/40"
+              className="w-full text-[10px] bg-transparent outline-none"
+              style={{ color: "var(--foreground)" }}
             />
           </div>
+          <style>{`
+            .spec-id-item { color: var(--foreground); }
+            .spec-id-item:hover { background-color: color-mix(in srgb, var(--foreground) 8%, transparent); }
+            .spec-id-item.is-selected { color: var(--primary); }
+          `}</style>
           <div className="max-h-40 overflow-y-auto py-1">
             {filtered.length === 0 && (
-              <p className="px-3 py-1.5 text-[10px] text-muted-foreground/40">No matching specs</p>
+              <p className="px-2 py-1.5 text-[10px]" style={{ color: "var(--muted-foreground)", opacity: 0.5 }}>No matching specs</p>
             )}
             {filtered.map((id) => {
               const selected = values.includes(id);
@@ -232,15 +258,11 @@ function SpecIdSelect({
                   key={id}
                   type="button"
                   onClick={() => toggle(id)}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-3 py-1.5 text-[10px] text-left transition-colors",
-                    selected
-                      ? "text-primary bg-primary/5"
-                      : "text-foreground/80 hover:bg-accent",
-                  )}
+                  className={cn("spec-id-item flex items-center gap-2 w-full px-2 py-1.5 text-[10px] text-left cursor-default select-none outline-none transition-colors", selected && "is-selected")}
                 >
-                  {selected && <Check size={9} className="flex-shrink-0" />}
-                  {!selected && <span className="w-[9px] flex-shrink-0" />}
+                  <span className="w-3 flex-shrink-0 flex items-center" style={{ color: "var(--primary)" }}>
+                    {selected && <Check size={9} />}
+                  </span>
                   {id}
                 </button>
               );
