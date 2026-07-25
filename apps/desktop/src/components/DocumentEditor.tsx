@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorMode, type ValidationIssue } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
 import { TabsRoot, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
+import { Select } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown";
 
 // ── Tag input ─────────────────────────────────────────────────────────────────
@@ -258,45 +259,6 @@ function getDocSection(path: string | null): "planned" | "other" {
   return /[/\\]\.curaye[/\\]planned[/\\]/.test(path) ? "planned" : "other";
 }
 
-// ── Compact select (for panel fields with many options) ───────────────────────
-
-function CompactSelect({
-  options,
-  value,
-  onChange,
-  field,
-  placeholder,
-}: {
-  options: string[];
-  value: string | undefined;
-  onChange: (v: string) => void;
-  field: string;
-  placeholder?: string;
-}) {
-  const activeField = useEditorStore((s) => s.activeIssueField);
-  const isHighlighted = activeField === field;
-
-  return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "w-full rounded-md px-2 py-1 text-[10px] bg-muted/30 border border-border/50",
-        "focus:outline-none focus:border-ring/50 transition-colors capitalize cursor-pointer",
-        "text-foreground appearance-none",
-        isHighlighted && "ring-2 ring-destructive",
-      )}
-    >
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map((opt) => (
-        <option key={opt} value={opt} className="capitalize">
-          {opt}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 // ── Status badge colors ───────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
@@ -424,42 +386,38 @@ function MetadataPanel({ open, onClose }: { open: boolean; onClose: () => void }
         </FieldRow>
 
         <FieldRow label="status">
-          <CompactSelect
-            field="status"
+          <Select
             options={STATUS_OPTIONS}
             value={fm.status as string | undefined}
-            onChange={(v) => updateFrontmatter("status", v)}
-            placeholder="— pick status"
+            onValueChange={(v) => updateFrontmatter("status", v)}
+            placeholder="pick status"
           />
         </FieldRow>
 
         <FieldRow label="effort">
-          <CompactSelect
-            field="effort"
+          <Select
             options={EFFORT_OPTIONS}
             value={fm.effort as string | undefined}
-            onChange={(v) => updateFrontmatter("effort", v)}
-            placeholder="— pick effort"
+            onValueChange={(v) => updateFrontmatter("effort", v)}
+            placeholder="pick effort"
           />
         </FieldRow>
 
         <FieldRow label="impact">
-          <CompactSelect
-            field="impact"
+          <Select
             options={LEVEL_OPTIONS}
             value={fm.impact as string | undefined}
-            onChange={(v) => updateFrontmatter("impact", v)}
-            placeholder="— pick impact"
+            onValueChange={(v) => updateFrontmatter("impact", v)}
+            placeholder="pick impact"
           />
         </FieldRow>
 
         <FieldRow label="desire">
-          <CompactSelect
-            field="desire"
+          <Select
             options={LEVEL_OPTIONS}
             value={fm.desire as string | undefined}
-            onChange={(v) => updateFrontmatter("desire", v)}
-            placeholder="— pick desire"
+            onValueChange={(v) => updateFrontmatter("desire", v)}
+            placeholder="pick desire"
           />
         </FieldRow>
 
