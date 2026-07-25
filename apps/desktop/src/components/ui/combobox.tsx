@@ -46,7 +46,7 @@ function InputGroup({
   return (
     <BaseCombobox.InputGroup
       className={cn(
-        "flex flex-wrap items-center gap-1 w-full rounded-md px-2 py-1 min-h-[26px]",
+        "flex flex-wrap items-center gap-1 w-full min-w-0 overflow-hidden rounded-md px-2 py-1 min-h-[26px]",
         "border border-border/50 bg-muted/30 transition-colors",
         "hover:border-border/80 focus-within:border-ring/60",
         isHighlighted && "ring-2 ring-destructive",
@@ -137,7 +137,7 @@ export function TagCombobox({
                 <BaseCombobox.Input
                   aria-label="Add tag"
                   placeholder={selected.length === 0 ? placeholder : undefined}
-                  className="flex-1 min-w-16 bg-transparent text-[10px] outline-none placeholder:opacity-50"
+                  className="flex-1 min-w-0 bg-transparent text-[10px] outline-none placeholder:opacity-50"
                   style={{ color: "var(--foreground)" }}
                   onKeyDown={(e) => {
                     if ((e.key === "Enter" || e.key === ",") && !highlightedRef.current) {
@@ -221,7 +221,7 @@ export function MultiCombobox({
                 <BaseCombobox.Input
                   aria-label="Filter options"
                   placeholder={selected.length === 0 ? placeholder : undefined}
-                  className="flex-1 min-w-16 bg-transparent text-[10px] outline-none placeholder:opacity-50"
+                  className="flex-1 min-w-0 bg-transparent text-[10px] outline-none placeholder:opacity-50"
                   style={{ color: "var(--foreground)" }}
                 />
               </>

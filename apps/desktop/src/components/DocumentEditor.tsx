@@ -40,7 +40,7 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
       <label className="w-16 pt-0.5 text-[10px] font-medium text-muted-foreground flex-shrink-0 capitalize">
         {label}
       </label>
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }
