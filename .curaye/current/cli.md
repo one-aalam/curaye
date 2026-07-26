@@ -2,7 +2,7 @@
 id: cli
 title: CLI — Command Surface
 domain: cli
-updated: 2026-07-26
+updated: 2026-07-27
 ---
 
 # CLI — Command Surface
@@ -112,10 +112,24 @@ All AI commands require a configured provider.
 | Command | Description |
 |---|---|
 | `curaye bootstrap [path] [--scaffold] [--git]` | Runs the project bootstrap interview and scaffolds `.curaye/`. Asks 5 questions (description, target user, app type, shared decisions, first feature), drafts `prd.md` and first planned spec via AI if configured, seeds `stack.md` from shared layer, copies selected shared decisions with `source` field, and auto-registers the project. Errors cleanly if `.curaye/` already exists. `--scaffold` immediately runs all three scaffold phases after writing `.curaye/`; `--git` implies `--scaffold` and captures everything in a single initial commit. Creates target directory if missing. |
-| `curaye scaffold [path] [--git] [--no-kit]` | Reads an existing `.curaye/` folder and produces a working project skeleton in three phases. **Phase 1 — Starter kit:** detects the generator from `~/.curaye/shared/stack/*.md` (`starter_kit_cmd` frontmatter) or from a built-in signal table (Tauri → `create-tauri-app`, Turborepo → `create-turbo`, create-tui, Next.js, Astro, SvelteKit, Vite), prompts the user, and spawns it with inherited stdio. `--no-kit` skips Phase 1. **Phase 2 — Overlay:** writes `README.md` (AI-generated overview or stub), presents a multiselect for shared patterns (`~/.curaye/shared/patterns/`) creating directories from their `directories` frontmatter field, copies shared agent files (`~/.curaye/shared/agents/`), and creates a fallback directory skeleton when Phase 1 produced no output. **Phase 3 — Git:** `--git` runs `git init`, `git add -A`, and `git commit -m "chore: init project with curaye scaffold"`. Errors with a clear message when `.curaye/` is absent. Creates target directory if missing. |
+| `curaye scaffold [path] [--git] [--no-kit]` | Reads an existing `.curaye/` folder and produces a working project skeleton in three phases. **Phase 1 — Starter kit:** scores all toolkit presets in `~/.curaye/shared/stack/` against the project's `stack.md` using the toolkit scoring algorithm (+4 for `app_type` match, +2 per matched `runtime`, +2 per matched `framework` token). If exactly one preset scores highest, prompts "Use preset X?" [y/n]; if multiple tie, shows a ranked select list; if none score above 0, falls back to the built-in signal table (Tauri → `create-tauri-app`, Turborepo → `create-turbo`, create-tui, Next.js, Astro, SvelteKit, Vite). When a toolkit preset is used and it declares `design_system` or `tools` fields, writes `NEXT_STEPS.md` to the project root (skipped if the file already exists). `--no-kit` skips Phase 1. **Phase 2 — Overlay:** writes `README.md` (AI-generated overview or stub), presents a multiselect for shared patterns (`~/.curaye/shared/patterns/`) creating directories from their `directories` frontmatter field, copies shared agent files (`~/.curaye/shared/agents/`), and creates a fallback directory skeleton when Phase 1 produced no output. **Phase 3 — Git:** `--git` runs `git init`, `git add -A`, and `git commit -m "chore: init project with curaye scaffold"`. Errors with a clear message when `.curaye/` is absent. Creates target directory if missing. `--json` output includes a `toolkit_match: { id, score, source: "preset" \| "builtin" \| null }` field. |
 | `curaye import [path] [--deterministic-only] [--skip-interview]` | Analyses an existing project without `.curaye/` and generates one at ~60% fidelity. Detects project type from `package.json`, `Cargo.toml`, or `pyproject.toml`; infers `stack.md`, `prd.md`, `current/` domain stubs, and `shipped/` entries from git tags. With AI configured, enhances `current/` docs with feature-level descriptions and infers `decisions/` candidates. Runs a 5-question targeted interview by default. All generated documents carry `confidence: inferred` in frontmatter. Auto-registers the project. |
 | `curaye review [path]` | Lists all documents with `confidence: inferred`, opens each in `$EDITOR`, and removes the `confidence` field when the user marks it reviewed — converting it to a standard protocol document. Supports `--json` to list inferred docs without interactive review. |
 | `curaye promote <file> [--to decisions\|patterns\|design\|agents\|stack] [--project <id>] [--id <id>]` | Promotes a `current/` or `decisions/` document to `~/.curaye/shared/<category>/`. Resolves the file path relative to the project's `.curaye/` directory, then falls back to cwd. Interactively prompts for category and id when `--to` / `--id` are omitted; in `--json` mode both must be supplied. Adds `source_project`, `promoted`, and `adopted_by` frontmatter fields; notifies all other registered projects via `~/.curaye/notifications.yaml`. Offers AI generalisation (removes project-specific names) when a provider is configured. Asks whether to add `promoted_to: <docRef>` back to the source document. Running promote on the same file twice updates the shared document in place. Promoting a `planned/` document errors: "Only current/ and decisions/ documents can be promoted." |
+
+## Toolkit registry
+
+Focused interface over `~/.curaye/shared/stack/` scoped to documents that have at least one toolkit frontmatter field (`runtime`, `app_type`, `framework`, `starter_kit`, `starter_kit_cmd`, `design_system`, `tools`). Internally delegates to `SharedLayer` read/write.
+
+| Command | Description |
+|---|---|
+| `curaye toolkit list [--runtime <id>] [--app-type <type>]` | Lists all shared stack documents with toolkit fields. `--runtime` filters to presets whose `runtime` array includes the given id; `--app-type` filters by `app_type`. Human output: one row per preset showing id, app_type, runtimes, and starter kit name. `--json` returns the full preset object array. |
+| `curaye toolkit add` | Guided nine-question interview (id, title, runtimes, app type, frameworks, starter kit name, starter kit command, design system, formatter/linter/test/e2e tools) that writes a new shared stack document to `~/.curaye/shared/stack/<id>.md` atomically. Errors in `--json` mode ("toolkit add is an interactive flow"). |
+| `curaye toolkit show <id>` | Prints the full shared stack document (frontmatter + body). `--json` returns the parsed preset object. |
+| `curaye toolkit edit <id>` | Opens the document in `$EDITOR`. |
+| `curaye toolkit remove <id>` | Prompts for confirmation, then deletes `~/.curaye/shared/stack/<id>.md`. Errors clearly when the id does not exist. |
+
+The toolkit scoring algorithm (`scorePresets`) is exported from `apps/cli/src/commands/toolkit.ts` and used by both `curaye scaffold` and the desktop `match_toolkit_preset` Tauri command.
 
 ## Skill distribution
 
