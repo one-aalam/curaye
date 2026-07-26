@@ -13,6 +13,10 @@ use tauri_plugin_dialog::DialogExt;
 pub struct RegistryProject {
     pub name: String,
     pub curaye_path: String,
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub adopts: Vec<String>,
     pub sync_status: Option<String>,
     pub ready_count: Option<u32>,
     pub drift_count: Option<u32>,
@@ -59,11 +63,11 @@ pub async fn read_registry() -> Result<Vec<RegistryProject>, String> {
                 .join(".curaye")
                 .to_string_lossy()
                 .to_string();
-            // Use id if present, fallback to name
-            let _entry_id = if e.id.is_empty() { e.name.clone() } else { e.id.clone() };
             RegistryProject {
                 name: e.name,
                 curaye_path,
+                id: e.id,
+                adopts: e.adopts,
                 sync_status: None,
                 ready_count: None,
                 drift_count: None,
@@ -92,8 +96,8 @@ pub async fn write_registry(projects: Vec<RegistryProject>) -> Result<(), String
             RegistryEntry {
                 name: p.name,
                 path: root,
-                id: String::new(),
-                adopts: Vec::new(),
+                id: p.id,
+                adopts: p.adopts,
             }
         })
         .collect();
@@ -119,6 +123,8 @@ pub async fn link_project(path: String) -> Result<(), String> {
         projects.push(RegistryProject {
             name,
             curaye_path,
+            id: String::new(),
+            adopts: Vec::new(),
             sync_status: None,
             ready_count: None,
             drift_count: None,
@@ -1015,18 +1021,7 @@ pub async fn create_document(curaye_path: String, section: String) -> Result<Str
 }
 
 fn chrono_today() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let days = secs / 86400;
-    // rough ISO date from epoch days (good enough for filenames)
-    let y = 1970 + days / 365;
-    let d_in_y = days % 365;
-    let m = (d_in_y / 30) + 1;
-    let d = (d_in_y % 30) + 1;
-    format!("{:04}-{:02}-{:02}", y, m.min(12), d.min(31))
+    chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
 // ── AI config ────────────────────────────────────────────────────────────────

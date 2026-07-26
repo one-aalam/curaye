@@ -29,6 +29,7 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 usearch = "2"
 base64 = "0.22"
+chrono = { version = "0.4", features = ["std"] }
 
 [profile.release]
 panic = "abort"
