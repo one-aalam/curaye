@@ -168,31 +168,38 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
             )}
 
             {/* Category picker */}
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Target category</p>
+            <fieldset>
+              <legend className="mb-1.5 text-xs font-medium text-muted-foreground">Target category</legend>
               <div className="grid grid-cols-1 gap-1">
                 {SHARED_CATEGORIES.map((cat) => (
-                  <button
+                  <label
                     key={cat}
-                    type="button"
-                    onClick={() => setCategory(cat)}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                      "flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-xs transition-colors",
+                      "has-focus-visible:ring-1 has-focus-visible:ring-primary/40",
                       category === cat
                         ? "border-primary/40 bg-primary/8 text-primary"
                         : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground",
                     )}
                   >
+                    <input
+                      type="radio"
+                      name="promote-category"
+                      value={cat}
+                      checked={category === cat}
+                      onChange={() => setCategory(cat)}
+                      className="sr-only"
+                    />
                     <span className={cn(
-                      "h-1.5 w-1.5 rounded-full flex-shrink-0",
+                      "h-1.5 w-1.5 rounded-full shrink-0",
                       category === cat ? "bg-primary" : "bg-muted-foreground/40",
                     )} />
                     <span className="font-mono font-medium">{cat}/</span>
                     <span className="text-[10px] opacity-60">{CATEGORY_DESCRIPTIONS[cat]}</span>
-                  </button>
+                  </label>
                 ))}
               </div>
-            </div>
+            </fieldset>
 
             {/* Shared document id */}
             <div>
