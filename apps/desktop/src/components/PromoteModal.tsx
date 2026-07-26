@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ArrowUpFromLine, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,16 +34,31 @@ interface PromoteModalProps {
   onClose: () => void;
 }
 
-export function PromoteModal({ filePath, section: _section, projectName, onClose }: PromoteModalProps) {
+function sectionToDefaultCategory(section: string): SharedCategory {
+  if ((SHARED_CATEGORIES as readonly string[]).includes(section)) {
+    return section as SharedCategory;
+  }
+  return "patterns";
+}
+
+export function PromoteModal({ filePath, section, projectName, onClose }: PromoteModalProps) {
   const fileName = filePath.split("/").pop() ?? "";
   const defaultId = fileName.replace(/\.md$/, "");
 
-  const [category, setCategory] = useState<SharedCategory>("decisions");
+  const [category, setCategory] = useState<SharedCategory>(() => sectionToDefaultCategory(section));
   const [docId, setDocId] = useState(defaultId);
   const [updateSource, setUpdateSource] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PromoteSharedResult | null>(null);
+  const [docExists, setDocExists] = useState(false);
+
+  useEffect(() => {
+    if (!docId.trim()) return;
+    void invoke<boolean>("shared_doc_exists", { category, docId })
+      .then(setDocExists)
+      .catch(() => setDocExists(false));
+  }, [category, docId]);
 
   const handlePromote = async () => {
     setError(null);
@@ -96,7 +111,6 @@ export function PromoteModal({ filePath, section: _section, projectName, onClose
             <div className="mt-4 flex justify-end">
               <DialogClose
                 className="rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-                onClick={onClose}
               >
                 Done
               </DialogClose>
@@ -155,9 +169,18 @@ export function PromoteModal({ filePath, section: _section, projectName, onClose
                 Frontmatter preview
               </p>
               <pre className="font-mono text-[10px] text-muted-foreground leading-relaxed">
-                {`source_project: ${projectName}\npromoted: ${new Date().toISOString().slice(0, 10)}\nadopted_by:\n  - ${projectName}`}
+                {`source_project: ${projectName}\npromoted: ${new Date().toISOString().slice(0, 10)}`}
               </pre>
+              <p className="mt-1.5 text-[10px] text-muted-foreground/50">
+                adopted_by will {docExists ? "merge with existing adopters" : `be set to [${projectName}]`}
+              </p>
             </div>
+
+            {docExists && (
+              <p className="rounded-md border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs text-amber-500">
+                shared/{category}/{docId} already exists — promoting will update it in place.
+              </p>
+            )}
 
             {/* Update source checkbox */}
             <label className="flex cursor-pointer items-center gap-2.5">

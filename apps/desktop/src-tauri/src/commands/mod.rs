@@ -1916,6 +1916,14 @@ async fn update_shared_notification(
 }
 
 #[command]
+pub async fn shared_doc_exists(category: String, doc_id: String) -> bool {
+    dirs::home_dir()
+        .map(|h| h.join(".curaye").join("shared").join(&category).join(format!("{}.md", doc_id)))
+        .map(|p| p.exists())
+        .unwrap_or(false)
+}
+
+#[command]
 pub async fn promote_to_shared(
     source_path: String,
     category: String,
