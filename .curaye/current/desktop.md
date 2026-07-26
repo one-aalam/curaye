@@ -121,6 +121,14 @@ Each theme sets full CSS custom property palettes plus `--glass-bg`, `--glass-bo
 
 `@curaye/desktop` depends on: `@curaye/core`, `@curaye/sync`, `@curaye/ai`, `@curaye/ui`. It must never be imported by any package.
 
+## Design notes
+
+### Drift badge is a lightweight approximation
+
+`check_project_drift` (the Tauri command that populates the sidebar amber dot) is intentionally a simplified count, not the full drift analysis. It checks whether adopted shared documents have changed since the project's last review snapshot and applies a keyword-term heuristic to estimate text-level drift. It does not walk through findings interactively, record override decisions, or distinguish intentional from accidental drift.
+
+The full drift analysis lives in `curaye check` (CLI) and `/curaye-check` (skill). Those surfaces give per-finding output, LCS diffs, interactive resolution, and the ability to record a local override decision in `decisions/`. The badge's job is only to signal "something may need attention" — not to replace the check workflow. Do not attempt to unify the two implementations; they serve different purposes at different levels of depth.
+
 ## What is not yet built
 
 - Settings and configuration UI → future spec
