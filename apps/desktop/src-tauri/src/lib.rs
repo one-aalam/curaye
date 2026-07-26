@@ -4,12 +4,12 @@ use tauri::Manager;
 use commands::{
     assign_spec_to_release, cancel_ai_stream, check_project_drift, create_document, create_override_decision,
     create_release, generate_brief_context, get_ai_config, get_drift_findings, get_last_opened,
-    ignore_drift_finding, link_project, mark_reviewed, parse_raw, pick_directory, promote_to_shared,
-    read_document, read_registry, reveal_in_finder, save_brief, scan_backlog, scan_project,
-    scan_release_specs, scan_releases, search_index_status, search_keyword, search_semantic,
-    serialize_document, set_last_opened, ship_release, start_ai_stream, sync_project, unlink_project,
-    update_release_status, update_spec_status, write_ai_config, write_document, write_registry,
-    AiStreamState,
+    ignore_drift_finding, link_project, list_documents, mark_reviewed, parse_raw, pick_directory,
+    promote_to_shared, read_document, read_registry, reveal_in_finder, save_brief, scan_backlog,
+    scan_project, scan_release_specs, scan_releases, search_index_status, search_keyword,
+    search_semantic, serialize_document, set_last_opened, ship_release, start_ai_stream,
+    sync_project, unlink_project, update_release_status, update_spec_status, write_ai_config,
+    write_document, write_registry, AiStreamState,
 };
 
 pub fn run() {
@@ -55,6 +55,7 @@ pub fn run() {
             search_semantic,
             search_keyword,
             search_index_status,
+            list_documents,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

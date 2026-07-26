@@ -7,6 +7,12 @@ import { useTreeStore } from "@/stores/treeStore";
 
 export type PalettePhase = "input" | "streaming" | "diff";
 
+export interface AttachedSpec {
+  id: string;
+  label: string;
+  docType: string;
+}
+
 export type ActionType =
   | "draft-spec"
   | "reentry-brief"
@@ -384,7 +390,7 @@ export interface PaletteContext {
   ragContext: RagContext | null;
 }
 
-function gatherContext(): PaletteContext {
+function gatherContext(attachedSpec: AttachedSpec | null): PaletteContext {
   const projectState = useProjectStore.getState();
   const editorState = useEditorStore.getState();
 
@@ -394,7 +400,9 @@ function gatherContext(): PaletteContext {
     : null;
 
   const openDocId =
-    (editorState.document?.frontmatter["id"] as string | undefined) ?? null;
+    (editorState.document?.frontmatter["id"] as string | undefined) ??
+    attachedSpec?.id ??
+    null;
 
   return {
     curayePath: project?.curaye_path ?? null,
@@ -461,6 +469,7 @@ interface PaletteState {
   error: string | null;
   aiConfig: AiProviderConfig | null;
   aiConfigChecked: boolean;
+  attachedSpec: AttachedSpec | null;
   // not subscribed by components — stored for cancel
   _abortController: AbortController | null;
   // saved focus target for restoration (criterion 10)
@@ -469,6 +478,7 @@ interface PaletteState {
   openPalette: () => Promise<void>;
   closePalette: () => void;
   setQuery: (v: string) => void;
+  setAttachedSpec: (spec: AttachedSpec | null) => void;
   execute: () => Promise<void>;
   saveOutput: () => Promise<void>;
   applyDiff: () => Promise<void>;
@@ -490,6 +500,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
   error: null,
   aiConfig: null,
   aiConfigChecked: false,
+  attachedSpec: null,
   _abortController: null,
   _previousFocus: null,
 
@@ -536,6 +547,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
       diffAfter: [],
       targetPath: null,
       error: null,
+      attachedSpec: null,
       _abortController: null,
     });
 
@@ -547,13 +559,14 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
   },
 
   setQuery: (v: string) => set({ query: v }),
+  setAttachedSpec: (spec: AttachedSpec | null) => set({ attachedSpec: spec }),
 
   execute: async () => {
     const { query, aiConfig } = get();
     if (!query.trim()) return;
 
     const action = resolveAction(query);
-    const context = gatherContext();
+    const context = gatherContext(get().attachedSpec);
 
     set({
       resolvedAction: action,
@@ -649,7 +662,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
     await invoke("write_document", { path: targetPath, content: streamedText });
 
     // Refresh tree and load the saved doc in editor
-    const context = gatherContext();
+    const context = gatherContext(get().attachedSpec);
     if (context.curayePath) {
       void useTreeStore.getState().loadTree(context.curayePath);
     }
@@ -666,7 +679,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
 
     await invoke("write_document", { path: targetPath, content: proposedText });
 
-    const context = gatherContext();
+    const context = gatherContext(get().attachedSpec);
     if (context.curayePath) {
       void useTreeStore.getState().loadTree(context.curayePath);
     }

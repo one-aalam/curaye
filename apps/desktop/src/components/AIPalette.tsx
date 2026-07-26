@@ -1,97 +1,489 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Search, Sparkles, X } from "lucide-react";
+import {
+  Search, Sparkles, X,
+  List, Map, Hammer, Rocket, RefreshCw, Globe,
+  FileText, FilePlus, ListChecks, CheckSquare, GitPullRequest,
+  MessageCircle, BookOpen, ArrowUpCircle, AlertCircle,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/stores/editorStore";
 import {
   usePaletteStore,
   type DiffLine,
+  type AttachedSpec,
 } from "@/stores/paletteStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { MarkdownContent } from "@/components/ui/markdown";
 
-// ── Suggestions ───────────────────────────────────────────────────────────────
+// ── Types & constants ─────────────────────────────────────────────────────────
 
-interface Suggestion {
+type CommandType = "instant" | "param" | "portfolio";
+type CategoryId = "all" | "plan" | "build" | "ship" | "maintain" | "portfolio";
+
+type IconComponent = React.FC<{ size?: number; className?: string }>;
+
+interface CommandEntry {
   label: string;
-  /** Pre-fill the input with this prefix and wait for the user to complete it. */
-  expandWith?: string;
-  /** Ghost hint shown after the label and used as input placeholder after expansion. */
+  type: CommandType;
+  Icon: IconComponent;
+  tabs: CategoryId[];
   hint?: string;
+  expandWith?: string;
 }
 
-const SUGGESTIONS: Suggestion[] = [
-  { label: "Draft a spec", expandWith: "Draft a spec for ", hint: "feature name…" },
-  { label: "Re-entry brief for current project" },
-  { label: "Update current/ from shipped spec" },
-  { label: "Detect drift in this project" },
-  { label: "Find where I solved this before", expandWith: "Find where I solved ", hint: "problem or topic…" },
-  { label: "Generate acceptance criteria", expandWith: "Generate acceptance criteria for ", hint: "spec name or feature…" },
+interface Category {
+  id: CategoryId;
+  label: string;
+  shortLabel: string;
+  Icon: IconComponent;
+}
+
+interface DocumentListItem {
+  id: string;
+  title: string;
+  docType: string;
+}
+
+const CATEGORIES: Category[] = [
+  { id: "all",       label: "All",       shortLabel: "All",   Icon: List      },
+  { id: "plan",      label: "Plan",      shortLabel: "Plan",  Icon: Map       },
+  { id: "build",     label: "Build",     shortLabel: "Build", Icon: Hammer    },
+  { id: "ship",      label: "Ship",      shortLabel: "Ship",  Icon: Rocket    },
+  { id: "maintain",  label: "Maintain",  shortLabel: "Maint.", Icon: RefreshCw },
+  { id: "portfolio", label: "Portfolio", shortLabel: "Port.", Icon: Globe     },
 ];
+
+const COMMANDS: CommandEntry[] = [
+  { label: "Draft a spec",                    type: "param",     Icon: FileText,     tabs: ["all", "plan"],            hint: "feature name…",       expandWith: "Draft a spec for "                   },
+  { label: "Re-entry brief for current project", type: "instant", Icon: BookOpen,   tabs: ["all", "plan", "maintain"]                                                                                 },
+  { label: "Generate acceptance criteria",    type: "param",     Icon: CheckSquare,  tabs: ["all", "build"],           hint: "spec name or feature…", expandWith: "Generate acceptance criteria for " },
+  { label: "Update current/ from shipped spec", type: "instant", Icon: ArrowUpCircle, tabs: ["all", "maintain"]                                                                                       },
+  { label: "Detect drift in this project",   type: "instant",   Icon: AlertCircle,  tabs: ["all", "maintain"]                                                                                         },
+  { label: "Find where I solved this before", type: "portfolio", Icon: Search,       tabs: ["all", "portfolio"],       hint: "problem or topic…",   expandWith: "Find where I solved "                },
+];
+
+const CONTEXTUAL_CMDS: { label: string; Icon: IconComponent }[] = [
+  { label: "What's missing from this spec?", Icon: ListChecks     },
+  { label: "Generate acceptance criteria",   Icon: CheckSquare    },
+  { label: "Generate a PR description",      Icon: GitPullRequest },
+];
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function CategoryRailButton({
+  category,
+  isActive,
+  onClick,
+}: {
+  category: Category;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center justify-center gap-0.5 w-full py-1.5 px-1 rounded-md transition-colors",
+        isActive
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+      )}
+    >
+      <category.Icon size={12} />
+      <span className="text-[9px] leading-none font-medium">{category.shortLabel}</span>
+    </button>
+  );
+}
+
+function CommandRow({
+  cmd,
+  isActive,
+  onActivate,
+  onHover,
+}: {
+  cmd: CommandEntry;
+  isActive: boolean;
+  onActivate: () => void;
+  onHover: () => void;
+}) {
+  const isPortfolio = cmd.type === "portfolio";
+  const keyBadge = cmd.type === "param" ? "→" : "↵";
+
+  return (
+    <button
+      type="button"
+      onClick={onActivate}
+      onMouseEnter={onHover}
+      className={cn(
+        "flex items-center gap-2 w-full rounded-md px-3 py-1.5 text-sm text-left transition-colors group",
+        isActive
+          ? "bg-primary/12 text-primary ring-1 ring-primary/25"
+          : "text-foreground/70 hover:bg-primary/6 hover:text-foreground",
+      )}
+    >
+      <cmd.Icon
+        size={12}
+        className={cn(
+          "shrink-0 transition-colors",
+          isPortfolio
+            ? isActive ? "text-foreground/60" : "text-foreground/40"
+            : isActive ? "text-primary" : "text-muted-foreground",
+        )}
+      />
+      <span className="flex-1 flex items-baseline gap-1.5 min-w-0">
+        <span className="shrink-0">{cmd.label}</span>
+        {cmd.hint && (
+          <span
+            className={cn(
+              "text-[11px] truncate transition-colors",
+              isActive ? "text-primary/35" : "text-muted-foreground/25",
+            )}
+          >
+            {cmd.hint}
+          </span>
+        )}
+      </span>
+      {isPortfolio && (
+        <span
+          className={cn(
+            "text-[9px] px-1 py-0.5 rounded border font-medium shrink-0",
+            isActive
+              ? "border-foreground/20 text-foreground/60"
+              : "border-muted-foreground/20 text-muted-foreground/50",
+          )}
+        >
+          all projects
+        </span>
+      )}
+      <kbd
+        className={cn(
+          "text-[10px] font-mono shrink-0 transition-opacity",
+          isActive
+            ? "opacity-100 text-primary/60"
+            : "opacity-0 group-hover:opacity-100 text-muted-foreground/40",
+        )}
+      >
+        {keyBadge}
+      </kbd>
+    </button>
+  );
+}
+
+function CommandGroup({
+  label,
+  commands,
+  activeIndex,
+  globalOffset,
+  onActivate,
+  onHover,
+}: {
+  label: string;
+  commands: CommandEntry[];
+  activeIndex: number;
+  globalOffset: number;
+  onActivate: (cmd: CommandEntry) => void;
+  onHover: (idx: number) => void;
+}) {
+  if (commands.length === 0) return null;
+  return (
+    <div className="mb-2">
+      <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider px-2 mb-1">
+        {label}
+      </p>
+      <div className="space-y-0.5">
+        {commands.map((cmd, localIdx) => (
+          <CommandRow
+            key={cmd.label}
+            cmd={cmd}
+            isActive={globalOffset + localIdx === activeIndex}
+            onActivate={() => onActivate(cmd)}
+            onHover={() => onHover(globalOffset + localIdx)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContextSection({
+  target,
+  onActivate,
+  onChangeClick,
+}: {
+  target: { label: string } | null;
+  onActivate: (label: string) => void;
+  onChangeClick: () => void;
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-1.5 px-3 py-2 shrink-0">
+        <FileText size={11} className="text-primary shrink-0" />
+        <span className="text-xs text-muted-foreground font-medium">For this spec</span>
+        {target && (
+          <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary font-medium truncate max-w-[160px]">
+            {target.label}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onChangeClick}
+          className="ml-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        >
+          change
+        </button>
+      </div>
+      <div className="flex-1 space-y-0.5 px-2 pb-2">
+        {CONTEXTUAL_CMDS.map(({ label, Icon }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => onActivate(label)}
+            className={cn(
+              "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-xs text-left transition-colors group",
+              "text-foreground/70 hover:bg-primary/8 hover:text-foreground",
+            )}
+          >
+            <Icon size={11} className="text-primary shrink-0" />
+            <span className="flex-1">
+              {label === "What's missing from this spec?"
+                ? `What's missing from this spec?`
+                : label}
+            </span>
+            <kbd className="text-[9px] text-muted-foreground/40 font-mono shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              ↵
+            </kbd>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AttachmentSection({
+  attachQuery,
+  setAttachQuery,
+  specList,
+  onSelect,
+  showCancel,
+  onCancel,
+}: {
+  attachQuery: string;
+  setAttachQuery: (v: string) => void;
+  specList: DocumentListItem[];
+  onSelect: (item: DocumentListItem) => void;
+  showCancel: boolean;
+  onCancel: () => void;
+}) {
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-1.5 px-3 py-2 shrink-0">
+        <FilePlus size={11} className="text-muted-foreground shrink-0" />
+        <span className="text-xs text-muted-foreground font-medium">Attach a spec</span>
+        {showCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            cancel
+          </button>
+        )}
+      </div>
+      <div className="px-3 pb-1.5 shrink-0">
+        <input
+          ref={searchRef}
+          value={attachQuery}
+          onChange={(e) => setAttachQuery(e.target.value)}
+          placeholder="Search specs…"
+          className="w-full bg-accent/40 rounded px-2 py-1 text-xs outline-none placeholder:text-muted-foreground/40"
+        />
+      </div>
+      <div className="flex-1 overflow-y-auto px-2 pb-1">
+        {specList.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground/40 px-2 py-1">No specs found</p>
+        ) : (
+          <div className="space-y-0.5">
+            {specList.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelect(item)}
+                className={cn(
+                  "flex items-center gap-2 w-full rounded-md px-2 py-1 text-xs text-left transition-colors group",
+                  "text-foreground/70 hover:bg-accent hover:text-foreground",
+                )}
+              >
+                <FileText size={10} className="text-muted-foreground shrink-0" />
+                <span className="flex-1 truncate">{item.title}</span>
+                <kbd className="text-[9px] text-muted-foreground/40 font-mono shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  ↵
+                </kbd>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Input phase ───────────────────────────────────────────────────────────────
 
 function InputPhase() {
-  const { query, setQuery, execute, closePalette } = usePaletteStore();
+  const { query, setQuery, execute, closePalette, attachedSpec, setAttachedSpec } =
+    usePaletteStore();
+  const { document: openDoc } = useEditorStore();
+  const { projects, selectedProjectId } = useProjectStore();
+
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const [activeCategory, setActiveCategory] = useState<CategoryId>("all");
+  const [showAttachment, setShowAttachment] = useState(false);
+  const [attachQuery, setAttachQuery] = useState("");
+  const [specList, setSpecList] = useState<DocumentListItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
 
+  const openDocTitle =
+    typeof openDoc?.frontmatter.title === "string" ? openDoc.frontmatter.title : null;
+  const hasOpenDoc = openDocTitle !== null;
+
+  const effectiveTarget: { label: string } | null = hasOpenDoc
+    ? { label: openDocTitle }
+    : attachedSpec
+      ? { label: attachedSpec.label }
+      : null;
+
+  const project = selectedProjectId
+    ? (projects.find((p) => p.name === selectedProjectId) ?? null)
+    : null;
+
+  // On mount: if no open doc and no attached spec, enter attachment mode immediately
   useEffect(() => {
+    if (!hasOpenDoc && !attachedSpec) {
+      setShowAttachment(true);
+    }
     inputRef.current?.focus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scroll active item into view when navigating by keyboard
+  // Load spec list when entering attachment mode
+  useEffect(() => {
+    if (!showAttachment || !project?.curaye_path) return;
+    void invoke<DocumentListItem[]>("list_documents", { curayePath: project.curaye_path })
+      .then((items) => setSpecList(items))
+      .catch(() => setSpecList([]));
+  }, [showAttachment, project?.curaye_path]);
+
+  // Reset keyboard highlight on query change
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [query]);
+
+  // Scroll active command row into view
   useEffect(() => {
     if (activeIndex < 0 || !listRef.current) return;
     const el = listRef.current.children[activeIndex] as HTMLElement | undefined;
     el?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  // Reset highlight when query is typed manually (not via suggestion click)
-  useEffect(() => {
-    setActiveIndex(-1);
-  }, [query]);
-
-  // Derive a contextual placeholder from whichever expandWith prefix is active
-  const expandedHint = SUGGESTIONS.find((s) => s.expandWith && query === s.expandWith)?.hint;
+  const expandedHint = COMMANDS.find((c) => c.expandWith && query === c.expandWith)?.hint;
   const placeholder = expandedHint ?? "What do you want to do?";
 
-  const activateSuggestion = useCallback(
-    (s: Suggestion) => {
-      if (s.expandWith) {
-        // Parameterized: pre-fill the prefix and let the user type the rest
-        setQuery(s.expandWith);
+  // Filtered & grouped commands
+  const filteredCommands =
+    activeCategory === "all"
+      ? COMMANDS
+      : COMMANDS.filter((c) => c.tabs.includes(activeCategory));
+
+  const paramCmds     = filteredCommands.filter((c) => c.type === "param");
+  const instantCmds   = filteredCommands.filter((c) => c.type === "instant");
+  const portfolioCmds = filteredCommands.filter((c) => c.type === "portfolio");
+
+  // Flat list for keyboard navigation (ordered same as visual rendering)
+  const flatCmds =
+    activeCategory === "all"
+      ? [...paramCmds, ...instantCmds, ...portfolioCmds]
+      : filteredCommands;
+
+  const activateCommand = useCallback(
+    (cmd: CommandEntry) => {
+      if (cmd.expandWith) {
+        setQuery(cmd.expandWith);
         requestAnimationFrame(() => inputRef.current?.focus());
       } else {
-        // Immediate: set query and execute
-        setQuery(s.label);
+        setQuery(cmd.label);
         void execute();
       }
     },
     [setQuery, execute],
   );
 
+  const activateContextualCommand = useCallback(
+    (label: string) => {
+      let finalQuery = label;
+      if (!hasOpenDoc && effectiveTarget) {
+        if (label === "Generate acceptance criteria") {
+          finalQuery = `Generate acceptance criteria for ${effectiveTarget.label}`;
+        } else if (label === "What's missing from this spec?") {
+          finalQuery = `What's missing from the '${effectiveTarget.label}' spec?`;
+        } else {
+          finalQuery = `${label} for ${effectiveTarget.label}`;
+        }
+      }
+      setQuery(finalQuery);
+      void execute();
+    },
+    [hasOpenDoc, effectiveTarget, setQuery, execute],
+  );
+
+  const handleSelectSpec = useCallback(
+    (item: DocumentListItem) => {
+      const spec: AttachedSpec = { id: item.id, label: item.title, docType: item.docType };
+      setAttachedSpec(spec);
+      setShowAttachment(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    [setAttachedSpec],
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, SUGGESTIONS.length - 1));
+      setActiveIndex((i) => Math.min(i + 1, flatCmds.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, -1));
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (activeIndex >= 0) {
-        const s = SUGGESTIONS[activeIndex];
-        if (s) activateSuggestion(s);
+        const cmd = flatCmds[activeIndex];
+        if (cmd) activateCommand(cmd);
       } else if (query.trim()) {
         void execute();
       }
     }
   };
 
+  const filteredSpecList = specList.filter(
+    (s) =>
+      attachQuery === "" ||
+      s.title.toLowerCase().includes(attachQuery.toLowerCase()) ||
+      s.id.toLowerCase().includes(attachQuery.toLowerCase()),
+  );
+
   return (
-    <div>
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-(--glass-border)">
+    <div className="flex flex-col">
+      {/* Search bar */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-(--glass-border) shrink-0">
         <Search size={14} className="text-muted-foreground shrink-0" />
         <input
           ref={inputRef}
@@ -113,57 +505,113 @@ function InputPhase() {
         </button>
       </div>
 
-      <div className="p-3">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-1 mb-2">
-          Suggestions
-        </p>
-        <div ref={listRef} className="space-y-0.5">
-          {SUGGESTIONS.map((s, idx) => {
-            const isActive = idx === activeIndex;
-            const isParameterized = !!s.expandWith;
-            return (
-              <button
-                key={s.label}
-                type="button"
-                onClick={() => activateSuggestion(s)}
-                onMouseEnter={() => setActiveIndex(idx)}
-                className={cn(
-                  "flex items-center gap-2 w-full rounded-md px-3 py-1.5 text-sm text-left transition-colors",
-                  isActive
-                    ? "bg-primary/12 text-primary ring-1 ring-primary/25"
-                    : "text-foreground/70 hover:bg-primary/6 hover:text-foreground",
-                )}
-              >
-                <Sparkles
-                  size={12}
-                  className={cn(
-                    "shrink-0 transition-colors",
-                    isActive ? "text-primary" : "text-muted-foreground",
-                  )}
+      {/* Body */}
+      <div className="flex h-[320px]">
+        {/* Left icon rail */}
+        <div className="w-[50px] border-r border-(--glass-border) flex flex-col items-center py-2 gap-0.5 shrink-0">
+          <CategoryRailButton
+            category={CATEGORIES[0]!}
+            isActive={activeCategory === "all"}
+            onClick={() => setActiveCategory("all")}
+          />
+          {/* Thin rule separating All from lifecycle categories */}
+          <div className="w-6 border-t border-(--glass-border) my-1" />
+          {CATEGORIES.slice(1).map((cat) => (
+            <CategoryRailButton
+              key={cat.id}
+              category={cat}
+              isActive={activeCategory === cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+            />
+          ))}
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Contextual section — fixed height */}
+          <div className="h-[140px] border-b border-(--glass-border) flex flex-col shrink-0">
+            {showAttachment ? (
+              <AttachmentSection
+                attachQuery={attachQuery}
+                setAttachQuery={setAttachQuery}
+                specList={filteredSpecList}
+                onSelect={handleSelectSpec}
+                showCancel={hasOpenDoc || attachedSpec !== null}
+                onCancel={() => {
+                  setShowAttachment(false);
+                  requestAnimationFrame(() => inputRef.current?.focus());
+                }}
+              />
+            ) : (
+              <ContextSection
+                target={effectiveTarget}
+                onActivate={activateContextualCommand}
+                onChangeClick={() => {
+                  setAttachQuery("");
+                  setShowAttachment(true);
+                }}
+              />
+            )}
+          </div>
+
+          {/* Command list */}
+          <div ref={listRef} className="flex-1 overflow-y-auto p-2">
+            {activeCategory === "all" ? (
+              <>
+                <CommandGroup
+                  label="Needs input"
+                  commands={paramCmds}
+                  activeIndex={activeIndex}
+                  globalOffset={0}
+                  onActivate={activateCommand}
+                  onHover={setActiveIndex}
                 />
-                <span className="flex-1 flex items-baseline gap-1.5 min-w-0">
-                  <span className="shrink-0">{s.label}</span>
-                  {s.hint && (
-                    <span
-                      className={cn(
-                        "text-[11px] truncate transition-colors",
-                        isActive ? "text-primary/35" : "text-muted-foreground/25",
-                      )}
-                    >
-                      {s.hint}
-                    </span>
-                  )}
-                </span>
-                {isActive && (
-                  <kbd className="text-[10px] text-primary/60 font-mono shrink-0">
-                    {isParameterized ? "→" : "↵"}
-                  </kbd>
-                )}
-              </button>
-            );
-          })}
+                <CommandGroup
+                  label="Quick actions"
+                  commands={instantCmds}
+                  activeIndex={activeIndex}
+                  globalOffset={paramCmds.length}
+                  onActivate={activateCommand}
+                  onHover={setActiveIndex}
+                />
+                <CommandGroup
+                  label="Across all projects"
+                  commands={portfolioCmds}
+                  activeIndex={activeIndex}
+                  globalOffset={paramCmds.length + instantCmds.length}
+                  onActivate={activateCommand}
+                  onHover={setActiveIndex}
+                />
+              </>
+            ) : (
+              <div className="space-y-0.5">
+                {filteredCommands.map((cmd, idx) => (
+                  <CommandRow
+                    key={cmd.label}
+                    cmd={cmd}
+                    isActive={idx === activeIndex}
+                    onActivate={() => activateCommand(cmd)}
+                    onHover={() => setActiveIndex(idx)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Freeform footer — always visible */}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.focus()}
+        className={cn(
+          "flex items-center gap-2 px-4 py-2.5 border-t border-dashed border-(--glass-border) shrink-0",
+          "text-muted-foreground/60 hover:text-muted-foreground text-xs transition-colors text-left",
+        )}
+      >
+        <MessageCircle size={12} className="shrink-0" />
+        <span>Ask anything about this project…</span>
+      </button>
     </div>
   );
 }

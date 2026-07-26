@@ -734,6 +734,59 @@ pub async fn scan_project(curaye_path: String) -> Result<ProjectTree, String> {
     Ok(tree)
 }
 
+// ── Palette document list ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentListItem {
+    pub id: String,
+    pub title: String,
+    pub doc_type: String,
+}
+
+#[command]
+pub async fn list_documents(curaye_path: String) -> Result<Vec<DocumentListItem>, String> {
+    let base = PathBuf::from(&curaye_path);
+    let mut items: Vec<DocumentListItem> = Vec::new();
+
+    for section in &["planned", "shipped"] {
+        let dir = base.join(section);
+        if !dir.is_dir() {
+            continue;
+        }
+        let Ok(mut entries) = tokio::fs::read_dir(&dir).await else {
+            continue;
+        };
+        let mut files: Vec<PathBuf> = Vec::new();
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                files.push(path);
+            }
+        }
+        files.sort();
+
+        for path in files {
+            let Ok(content) = tokio::fs::read_to_string(&path).await else {
+                continue;
+            };
+            let fm = parse_frontmatter_quick(&content);
+            let id = fm.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let title = fm.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if id.is_empty() || title.is_empty() {
+                continue;
+            }
+            items.push(DocumentListItem {
+                id,
+                title,
+                doc_type: section.to_string(),
+            });
+        }
+    }
+
+    Ok(items)
+}
+
 async fn scan_section(base: &Path, section: &str, nodes: &mut Vec<TreeNode>) {
     let dir = base.join(section);
     if !dir.is_dir() {
