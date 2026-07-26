@@ -8,6 +8,7 @@ export interface TreeNode {
   path: string;
   section: DocSection;
   status?: string;
+  title?: string;
   isDraft: boolean;
   hasValidationError: boolean;
 }

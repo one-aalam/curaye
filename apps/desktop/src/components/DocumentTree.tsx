@@ -11,14 +11,6 @@ import { PromoteModal } from "@/components/PromoteModal";
 import { MenuRoot, MenuContent, MenuItem } from "@/components/ui/menu";
 import { SearchBar } from "@/components/SearchBar";
 
-const STATUS_DOT: Record<string, string> = {
-  draft: "bg-zinc-400",
-  ready: "bg-blue-400",
-  building: "bg-amber-400",
-  done: "bg-green-500",
-  shelved: "bg-zinc-600",
-};
-
 const STATUS_LABEL: Record<string, string> = {
   draft: "draft",
   ready: "ready",
@@ -27,12 +19,12 @@ const STATUS_LABEL: Record<string, string> = {
   shelved: "shelved",
 };
 
-const STATUS_TEXT: Record<string, string> = {
-  draft: "text-zinc-400",
-  ready: "text-blue-400",
-  building: "text-amber-400",
-  done: "text-green-500",
-  shelved: "text-zinc-500",
+const STATUS_BG: Record<string, string> = {
+  draft: "bg-zinc-400/10 text-zinc-400",
+  ready: "bg-blue-400/10 text-blue-400",
+  building: "bg-amber-400/10 text-amber-400",
+  done: "bg-green-500/10 text-green-500",
+  shelved: "bg-zinc-600/10 text-zinc-500",
 };
 
 const SECTION_LABELS: Record<DocSection, string> = {
@@ -51,21 +43,39 @@ const DOC_TYPES: Record<DocSection, string> = {
   root: "generic",
 };
 
-function StatusBadge({ status }: { status?: string | undefined }) {
-  if (status === undefined) return null;
-  const dot = STATUS_DOT[status] ?? "bg-zinc-400";
-  return <span className={cn("inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 mt-px", dot)} />;
-}
-
 function StatusLabel({ status, selected }: { status?: string; selected: boolean }) {
   if (!status) return null;
   const label = STATUS_LABEL[status] ?? status;
-  const color = selected ? "text-primary/70" : (STATUS_TEXT[status] ?? "text-muted-foreground/50");
+  const colors = selected
+    ? "bg-primary/15 text-primary/80"
+    : (STATUS_BG[status] ?? "bg-zinc-400/10 text-zinc-400");
   return (
-    <span className={cn("text-[9px] font-medium uppercase tracking-wide flex-shrink-0", color)}>
+    <span className={cn("text-[9px] font-semibold uppercase tracking-wide flex-shrink-0 px-1.5 py-0.5 rounded", colors)}>
       {label}
     </span>
   );
+}
+
+type FilenamePrefix =
+  | { kind: "ordinal"; label: string }
+  | { kind: "date"; label: string };
+
+function parseFilenamePrefix(name: string): FilenamePrefix | null {
+  const stem = name.replace(/\.md$/, "").replace(/^_/, "");
+  const dateMatch = stem.match(/^(\d{4})-(\d{2})-(\d{2})[-_]/);
+  if (dateMatch) {
+    const d = new Date(
+      parseInt(dateMatch[1]!),
+      parseInt(dateMatch[2]!) - 1,
+      parseInt(dateMatch[3]!),
+    );
+    return { kind: "date", label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
+  }
+  const ordinalMatch = stem.match(/^(\d{1,3})-/);
+  if (ordinalMatch) {
+    return { kind: "ordinal", label: String(parseInt(ordinalMatch[1]!)) };
+  }
+  return null;
 }
 
 function TreeItem({ node, section }: { node: TreeNode; section: DocSection }) {
@@ -80,8 +90,13 @@ function TreeItem({ node, section }: { node: TreeNode; section: DocSection }) {
 
   const canPromote = section === "current" || section === "decisions";
 
-  // Strip .md extension and leading _ for display
-  const displayName = node.name.replace(/\.md$/, "").replace(/^_/, "");
+  const stem = node.name.replace(/\.md$/, "").replace(/^_/, "");
+  const prefix = parseFilenamePrefix(node.name);
+  const displayName = node.title ?? (
+    prefix
+      ? stem.replace(/^[\d]{1,3}-/, "").replace(/^\d{4}-\d{2}-\d{2}[-_]/, "")
+      : stem
+  );
 
   const handleClick = () => {
     selectDocument(node.path);
@@ -122,21 +137,30 @@ function TreeItem({ node, section }: { node: TreeNode; section: DocSection }) {
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         className={cn(
-          "group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition-colors",
+          "group flex w-full items-center gap-1.5 px-2 py-1.5 text-left transition-all",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "active:scale-[0.99]",
           selected
-            ? "bg-primary/10 text-primary"
-            : "text-foreground/70 hover:bg-foreground/[0.06] hover:text-foreground",
+            ? "bg-primary/[0.14] text-primary font-medium border-l-2 border-primary pl-[6px] rounded-r-md"
+            : "rounded-md text-foreground/70 hover:bg-primary/[0.07] hover:text-foreground active:bg-primary/[0.12]",
           node.isDraft && "opacity-60",
         )}
       >
-        {section === "planned" && <StatusBadge status={node.status} />}
         {node.hasValidationError && (
           <AlertCircle size={10} className="text-destructive flex-shrink-0" />
         )}
+        {prefix !== null && (
+          <span className={cn(
+            "flex-shrink-0 font-mono text-[9px] font-semibold tabular-nums leading-none px-1 py-0.5 rounded",
+            prefix.kind === "ordinal"
+              ? "bg-primary/10 text-primary/60"
+              : "bg-blue-400/10 text-blue-400/70",
+          )}>
+            {prefix.label}
+          </span>
+        )}
         <span className={cn(
           "flex-1 truncate text-[11px]",
-          selected ? "font-medium" : "",
           node.isDraft && "italic",
         )}>
           {displayName}
@@ -202,8 +226,8 @@ function SectionHeader({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex flex-1 items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider",
-          "text-muted-foreground hover:text-foreground transition-colors",
+          "flex flex-1 items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-sm",
+          "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] transition-colors",
         )}
       >
         {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}

@@ -52,11 +52,12 @@ function ProjectItem({ project, selected }: { project: RegistryProject; selected
         onClick={handleSelect}
         onContextMenu={handleContextMenu}
         className={cn(
-          "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-all",
+          "group flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-all",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+          "active:scale-[0.99]",
           selected
-            ? "bg-sidebar-primary/15 text-sidebar-primary font-medium shadow-sm"
-            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            ? "bg-sidebar-primary/20 text-sidebar-primary font-medium border-l-2 border-sidebar-primary pl-[6px] rounded-r-md"
+            : "rounded-md text-sidebar-foreground/70 hover:bg-sidebar-primary/[0.07] hover:text-sidebar-foreground active:bg-sidebar-primary/[0.12]",
         )}
       >
         {selected

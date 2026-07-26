@@ -690,6 +690,7 @@ pub struct TreeNode {
     pub path: String,
     pub section: String,
     pub status: Option<String>,
+    pub title: Option<String>,
     pub is_draft: bool,
     pub has_validation_error: bool,
 }
@@ -723,6 +724,7 @@ pub async fn scan_project(curaye_path: String) -> Result<ProjectTree, String> {
                 path: path.to_string_lossy().to_string(),
                 section: "root".to_string(),
                 status: None,
+                title: None,
                 is_draft: false,
                 has_validation_error: false,
             });
@@ -755,9 +757,11 @@ async fn scan_section(base: &Path, section: &str, nodes: &mut Vec<TreeNode>) {
         let mut status = None;
         let mut has_validation_error = false;
 
+        let mut title = None;
         if let Ok(content) = tokio::fs::read_to_string(&path).await {
             let parsed = parse_frontmatter_quick(&content);
             status = parsed.get("status").and_then(|v| v.as_str()).map(|s| s.to_string());
+            title = parsed.get("title").and_then(|v| v.as_str()).map(|s| s.to_string());
             // basic validation: spec docs should have id, title, status
             if section == "planned" || section == "shipped" {
                 let has_id = parsed.contains_key("id");
@@ -773,6 +777,7 @@ async fn scan_section(base: &Path, section: &str, nodes: &mut Vec<TreeNode>) {
             path: path.to_string_lossy().to_string(),
             section: section.to_string(),
             status,
+            title,
             is_draft,
             has_validation_error,
         });
