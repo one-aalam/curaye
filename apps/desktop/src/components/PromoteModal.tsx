@@ -168,38 +168,49 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
             )}
 
             {/* Category picker */}
-            <fieldset>
-              <legend className="mb-1.5 text-xs font-medium text-muted-foreground">Target category</legend>
-              <div className="grid grid-cols-1 gap-1">
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Target category</p>
+              <div
+                role="radiogroup"
+                aria-label="Target category"
+                className="grid grid-cols-1 gap-1"
+                onKeyDown={(e) => {
+                  const idx = SHARED_CATEGORIES.indexOf(category);
+                  if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    setCategory(SHARED_CATEGORIES[(idx + 1) % SHARED_CATEGORIES.length]!);
+                  } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setCategory(SHARED_CATEGORIES[(idx - 1 + SHARED_CATEGORIES.length) % SHARED_CATEGORIES.length]!);
+                  }
+                }}
+              >
                 {SHARED_CATEGORIES.map((cat) => (
-                  <label
+                  <button
                     key={cat}
+                    type="button"
+                    role="radio"
+                    aria-checked={category === cat}
+                    tabIndex={category === cat ? 0 : -1}
+                    onClick={() => setCategory(cat)}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-xs transition-colors",
-                      "has-focus-visible:ring-1 has-focus-visible:ring-primary/40",
+                      "flex items-center gap-2.5 rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
                       category === cat
                         ? "border-primary/40 bg-primary/8 text-primary"
                         : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground",
                     )}
                   >
-                    <input
-                      type="radio"
-                      name="promote-category"
-                      value={cat}
-                      checked={category === cat}
-                      onChange={() => setCategory(cat)}
-                      className="sr-only"
-                    />
                     <span className={cn(
                       "h-1.5 w-1.5 rounded-full shrink-0",
                       category === cat ? "bg-primary" : "bg-muted-foreground/40",
                     )} />
                     <span className="font-mono font-medium">{cat}/</span>
                     <span className="text-[10px] opacity-60">{CATEGORY_DESCRIPTIONS[cat]}</span>
-                  </label>
+                  </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Shared document id */}
             <div>
