@@ -8,6 +8,7 @@ import { readAiConfig, isAvailable, createProvider } from '@curaye/ai'
 import type { Provider } from '@curaye/ai'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
 import { today } from '../lib/context.js'
+import { runScaffold } from './scaffold.js'
 
 const REQUIRED_DIRS = ['planned', 'current', 'shipped', 'decisions']
 
@@ -242,9 +243,18 @@ export function registerBootstrap(program: Command): void {
   program
     .command('bootstrap [path]')
     .description('Run the project bootstrap interview and scaffold .curaye/')
-    .action(async (targetPath: string | undefined) => {
+    .option('--scaffold', 'After writing .curaye/, run scaffold (all three phases)')
+    .option('--git', 'Run git init + initial commit (implies --scaffold)')
+    .action(async (targetPath: string | undefined, opts: { scaffold?: boolean; git?: boolean }) => {
       const resolvedPath = path.resolve(targetPath ?? process.cwd())
       const curayePath = path.join(resolvedPath, '.curaye')
+
+      // --git implies --scaffold
+      const doScaffold = opts.scaffold ?? opts.git ?? false
+      const doGit = opts.git ?? false
+
+      // Create target directory if it doesn't exist (AC #18)
+      await fs.mkdir(resolvedPath, { recursive: true })
 
       // AC #8 — bail if .curaye/ already exists
       try {
@@ -410,6 +420,12 @@ export function registerBootstrap(program: Command): void {
       }
       printLine(`  Registered as:  ${projectId}`)
       printLine('')
-      outro(`Run \`curaye list\` to see your specs, or \`curaye ai draft\` to add more.`)
+
+      // --- Run scaffold phases if requested (AC #16, #17) ---
+      if (doScaffold) {
+        await runScaffold(resolvedPath, { git: doGit, noKit: false })
+      }
+
+      outro(doScaffold ? 'Done.' : `Run \`curaye list\` to see your specs, or \`curaye ai draft\` to add more.`)
     })
 }
