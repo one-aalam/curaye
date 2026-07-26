@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowUpFromLine, Check } from "lucide-react";
+import { ArrowUpFromLine, Check, Sparkles, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DialogRoot,
@@ -41,17 +41,39 @@ function sectionToDefaultCategory(section: string): SharedCategory {
   return "patterns";
 }
 
+function validateDocId(id: string): string | null {
+  if (!id.trim()) return "Document id is required";
+  if (/[/\\:*?"<>|]/.test(id)) return "Cannot contain / \\ : * ? \" < > |";
+  if (id === "." || id === "..") return "Cannot be . or ..";
+  return null;
+}
+
 export function PromoteModal({ filePath, section, projectName, onClose }: PromoteModalProps) {
   const fileName = filePath.split("/").pop() ?? "";
   const defaultId = fileName.replace(/\.md$/, "");
 
   const [category, setCategory] = useState<SharedCategory>(() => sectionToDefaultCategory(section));
   const [docId, setDocId] = useState(defaultId);
+  const [docIdError, setDocIdError] = useState<string | null>(null);
   const [updateSource, setUpdateSource] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PromoteSharedResult | null>(null);
+
+  // Pre-flight checks
   const [docExists, setDocExists] = useState(false);
+  const [promotedToRef, setPromotedToRef] = useState<string | null>(null);
+
+  // AI generalization
+  const [aiAvailable, setAiAvailable] = useState(false);
+  const [generalizing, setGeneralizing] = useState(false);
+  const [generalizeError, setGeneralizeError] = useState<string | null>(null);
+  const [generalizedContent, setGeneralizedContent] = useState<string | null>(null);
+
+  useEffect(() => {
+    void invoke<string | null>("get_promoted_to_ref", { path: filePath }).then(setPromotedToRef).catch(() => {});
+    void invoke<unknown>("get_ai_config").then((cfg) => setAiAvailable(cfg !== null)).catch(() => {});
+  }, [filePath]);
 
   useEffect(() => {
     if (!docId.trim()) return;
@@ -60,7 +82,27 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
       .catch(() => setDocExists(false));
   }, [category, docId]);
 
+  const handleDocIdChange = (value: string) => {
+    setDocId(value);
+    setDocIdError(validateDocId(value));
+  };
+
+  const handleGeneralize = async () => {
+    setGeneralizeError(null);
+    setGeneralizing(true);
+    try {
+      const generalized = await invoke<string>("generalize_document", { sourcePath: filePath });
+      setGeneralizedContent(generalized);
+    } catch (e) {
+      setGeneralizeError(String(e));
+    } finally {
+      setGeneralizing(false);
+    }
+  };
+
   const handlePromote = async () => {
+    const idErr = validateDocId(docId);
+    if (idErr) { setDocIdError(idErr); return; }
     setError(null);
     setPromoting(true);
     try {
@@ -70,6 +112,7 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
         docId,
         projectId: projectName,
         updateSource,
+        contentOverride: generalizedContent ?? null,
       });
       setResult(res);
     } catch (e) {
@@ -109,15 +152,21 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
               </div>
             </div>
             <div className="mt-4 flex justify-end">
-              <DialogClose
-                className="rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-              >
+              <DialogClose className="rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors">
                 Done
               </DialogClose>
             </div>
           </div>
         ) : (
           <div className="p-5 space-y-4">
+            {/* Re-promote indicator */}
+            {promotedToRef && (
+              <p className="rounded-md border border-blue-500/20 bg-blue-500/8 px-3 py-2 text-xs text-blue-400">
+                Previously promoted to{" "}
+                <span className="font-mono">{promotedToRef}</span> — this will re-sync it.
+              </p>
+            )}
+
             {/* Category picker */}
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">Target category</p>
@@ -153,14 +202,20 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
               <input
                 type="text"
                 value={docId}
-                onChange={(e) => setDocId(e.target.value)}
+                onChange={(e) => handleDocIdChange(e.target.value)}
                 className={cn(
-                  "w-full rounded-md border border-border/50 bg-card/50 px-3 py-1.5",
+                  "w-full rounded-md border bg-card/50 px-3 py-1.5",
                   "font-mono text-xs text-foreground placeholder:text-muted-foreground/40",
-                  "focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20",
+                  "focus:outline-none focus:ring-1 transition-colors",
+                  docIdError
+                    ? "border-destructive/50 focus:border-destructive/60 focus:ring-destructive/20"
+                    : "border-border/50 focus:border-primary/40 focus:ring-primary/20",
                 )}
                 placeholder={defaultId}
               />
+              {docIdError && (
+                <p className="mt-1 text-[10px] text-destructive">{docIdError}</p>
+              )}
             </div>
 
             {/* Metadata preview */}
@@ -182,6 +237,47 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
               </p>
             )}
 
+            {/* AI generalization */}
+            {aiAvailable && (
+              <div>
+                {generalizedContent ? (
+                  <div className="flex items-center justify-between rounded-md border border-green-500/20 bg-green-500/8 px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles size={10} className="text-green-400 flex-shrink-0" />
+                      <span className="text-xs text-green-400">Using generalized version</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setGeneralizedContent(null); setGeneralizeError(null); }}
+                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <RotateCcw size={9} />
+                      Reset
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleGeneralize()}
+                    disabled={generalizing}
+                    className={cn(
+                      "flex w-full items-center justify-center gap-1.5 rounded-md border border-border/40 px-3 py-2",
+                      "text-xs text-muted-foreground hover:border-border hover:text-foreground transition-colors",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                    )}
+                  >
+                    <Sparkles size={10} className={generalizing ? "animate-pulse" : ""} />
+                    {generalizing ? "Generalizing…" : "Generalize with AI"}
+                  </button>
+                )}
+                {generalizeError && (
+                  <p className="mt-1.5 rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-xs text-destructive">
+                    {generalizeError}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Update source checkbox */}
             <label className="flex cursor-pointer items-center gap-2.5">
               <input
@@ -191,7 +287,8 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
                 className="h-3.5 w-3.5 rounded accent-primary"
               />
               <span className="text-xs text-muted-foreground">
-                Add <span className="font-mono">promoted_to</span> reference to source document
+                Add <span className="font-mono">promoted_to</span> reference to{" "}
+                <span className="font-mono">{fileName}</span>
               </span>
             </label>
 
@@ -212,7 +309,7 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
               <button
                 type="button"
                 onClick={() => void handlePromote()}
-                disabled={promoting || !docId.trim()}
+                disabled={promoting || !!docIdError || !docId.trim()}
                 className={cn(
                   "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                   "bg-primary text-primary-foreground hover:bg-primary/90",

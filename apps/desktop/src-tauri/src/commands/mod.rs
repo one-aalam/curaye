@@ -1916,6 +1916,118 @@ async fn update_shared_notification(
 }
 
 #[command]
+pub async fn get_promoted_to_ref(path: String) -> Option<String> {
+    let content = tokio::fs::read_to_string(&path).await.ok()?;
+    let (fm, _) = split_frontmatter(&content);
+    fm.get("promoted_to").and_then(|v| v.as_str()).map(|s| s.to_string())
+}
+
+// ── Non-streaming AI completion helpers ───────────────────────────────────────
+
+async fn complete_anthropic_once(config: &AiProviderConfig, system: &str, user_msg: &str) -> Result<String, String> {
+    let api_key = config.api_key.as_deref().unwrap_or("");
+    let body = serde_json::json!({
+        "model": config.model,
+        "max_tokens": 8192,
+        "system": system,
+        "messages": [{"role": "user", "content": user_msg}],
+    });
+    let client = make_client()?;
+    let resp = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("Content-Type", "application/json")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Anthropic request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Anthropic HTTP {status}: {body_text}"));
+    }
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    v["content"][0]["text"].as_str().map(|s| s.to_string())
+        .ok_or_else(|| "Unexpected Anthropic response".to_string())
+}
+
+async fn complete_ollama_once(config: &AiProviderConfig, system: &str, user_msg: &str) -> Result<String, String> {
+    let base_url = config.base_url.as_deref().unwrap_or("http://localhost:11434");
+    let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": config.model,
+        "stream": false,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_msg}
+        ],
+    });
+    let client = make_client()?;
+    let resp = client.post(&url).header("Content-Type", "application/json").json(&body)
+        .send().await.map_err(|e| format!("Cannot reach Ollama at {url}: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Ollama HTTP {status}: {body_text}"));
+    }
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    v["message"]["content"].as_str().map(|s| s.to_string())
+        .ok_or_else(|| "Unexpected Ollama response".to_string())
+}
+
+async fn complete_openai_once(config: &AiProviderConfig, system: &str, user_msg: &str) -> Result<String, String> {
+    let base_url = config.base_url.as_deref().unwrap_or("https://api.openai.com/v1");
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let effective_key = config.api_key.as_deref().filter(|k| !k.is_empty());
+    let body = serde_json::json!({
+        "model": config.model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_msg}
+        ],
+    });
+    let client = make_client()?;
+    let mut req = client.post(&url).header("Content-Type", "application/json").json(&body);
+    if let Some(key) = effective_key {
+        req = req.header("Authorization", format!("Bearer {key}"));
+    }
+    let resp = req.send().await.map_err(|e| format!("Cannot reach {url}: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Server at {url} returned HTTP {status}: {body_text}"));
+    }
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    v["choices"][0]["message"]["content"].as_str().map(|s| s.to_string())
+        .ok_or_else(|| "Unexpected OpenAI response".to_string())
+}
+
+#[command]
+pub async fn generalize_document(source_path: String) -> Result<String, String> {
+    let content = tokio::fs::read_to_string(&source_path)
+        .await
+        .map_err(|e| format!("Cannot read source file: {e}"))?;
+
+    let config = get_ai_config().await?
+        .ok_or_else(|| "No AI provider configured".to_string())?;
+
+    let system = "You rewrite technical documents for a shared knowledge layer. \
+        Remove all project-specific names, identifiers, and repository names. \
+        Replace concrete project names with generic placeholders like \"your-project\". \
+        Keep the structure, insights, and decisions intact. \
+        Return ONLY the rewritten document — no preamble, no commentary.";
+    let user_msg = format!("Rewrite this document to be project-neutral:\n\n{content}");
+
+    match config.kind.as_str() {
+        "anthropic" => complete_anthropic_once(&config, system, &user_msg).await,
+        "ollama"    => complete_ollama_once(&config, system, &user_msg).await,
+        "openai"    => complete_openai_once(&config, system, &user_msg).await,
+        other => Err(format!("Unknown provider: {other}")),
+    }
+}
+
+#[command]
 pub async fn shared_doc_exists(category: String, doc_id: String) -> bool {
     dirs::home_dir()
         .map(|h| h.join(".curaye").join("shared").join(&category).join(format!("{}.md", doc_id)))
@@ -1930,6 +2042,7 @@ pub async fn promote_to_shared(
     doc_id: String,
     project_id: String,
     update_source: bool,
+    content_override: Option<String>,
 ) -> Result<PromoteSharedResult, String> {
     let valid_categories = ["decisions", "patterns", "design", "agents", "stack"];
     if !valid_categories.contains(&category.as_str()) {
@@ -1949,11 +2062,16 @@ pub async fn promote_to_shared(
         return Err("Only current/ and decisions/ documents can be promoted.".to_string());
     }
 
-    let source_content = tokio::fs::read_to_string(&source_path_obj)
-        .await
-        .map_err(|e| e.to_string())?;
+    // content_override is the generalized version; fall back to reading the source file
+    let content_for_shared = if let Some(ov) = content_override {
+        ov
+    } else {
+        tokio::fs::read_to_string(&source_path_obj)
+            .await
+            .map_err(|e| e.to_string())?
+    };
 
-    let (mut fm, body) = split_frontmatter(&source_content);
+    let (mut fm, body) = split_frontmatter(&content_for_shared);
 
     // Build shared document path
     let shared_base = dirs::home_dir()
@@ -2034,9 +2152,13 @@ pub async fn promote_to_shared(
         update_shared_notification(&doc_id, &category, other_projects, &today).await?;
     }
 
-    // Optionally back-link source document
+    // Optionally back-link source document — always read the original file,
+    // since content_for_shared may be a generalized rewrite.
     if update_source {
-        let (mut src_fm, src_body) = split_frontmatter(&source_content);
+        let original = tokio::fs::read_to_string(&source_path_obj)
+            .await
+            .map_err(|e| e.to_string())?;
+        let (mut src_fm, src_body) = split_frontmatter(&original);
         src_fm.insert(
             "promoted_to".to_string(),
             serde_yaml::Value::String(doc_ref.clone()),
