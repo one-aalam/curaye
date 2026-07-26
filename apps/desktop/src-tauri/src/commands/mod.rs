@@ -2011,18 +2011,28 @@ fn shared_reviews_path() -> PathBuf {
         .join("shared-reviews")
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 struct DriftIgnoresFile {
     #[serde(default)]
     ignores: Vec<DriftIgnoreEntry>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DriftIgnoreEntry {
     #[serde(rename = "projectId")]
     project_id: String,
     #[serde(rename = "docId")]
     doc_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DriftFinding {
+    pub doc_id: String,
+    pub doc_ref: String,
+    pub category: String,
+    pub classification: String,
+    pub shared_path: String,
+    pub shared_snippet: String,
 }
 
 async fn load_ignored_docs(project_id: &str) -> std::collections::HashSet<String> {
@@ -2116,39 +2126,51 @@ async fn read_project_local_content(project_path: &str) -> String {
     parts.join("\n")
 }
 
-/// Count unresolved drift findings for a project (used for desktop sidebar badge).
-#[command]
-pub async fn check_project_drift(project_name: String, project_path: String) -> Result<u32, String> {
+async fn get_project_id(project_name: &str, project_path: &str) -> String {
+    if let Ok(content) = tokio::fs::read_to_string(&registry_path()).await {
+        if let Ok(file) = serde_yaml::from_str::<RegistryFile>(&content) {
+            if let Some(entry) = file.projects.iter().find(|p| p.name == project_name || p.path == project_path) {
+                if !entry.id.is_empty() {
+                    return entry.id.clone();
+                }
+            }
+        }
+    }
+    project_name.to_string()
+}
+
+async fn detect_drift_findings(
+    project_name: &str,
+    project_path: &str,
+) -> Result<Vec<DriftFinding>, String> {
     let reg_path = registry_path();
     if !reg_path.exists() {
-        return Ok(0);
+        return Ok(vec![]);
     }
     let content = tokio::fs::read_to_string(&reg_path).await.map_err(|e| e.to_string())?;
     let file: RegistryFile = serde_yaml::from_str(&content).map_err(|e| e.to_string())?;
 
-    // Find this project's adopts list
     let project_entry = file.projects.iter().find(|p| p.name == project_name || p.path == project_path);
     let adopts = match project_entry {
         Some(e) => e.adopts.clone(),
-        None => return Ok(0),
+        None => return Ok(vec![]),
     };
-
     let project_id = match project_entry {
         Some(e) if !e.id.is_empty() => e.id.clone(),
-        _ => project_name.clone(),
+        _ => project_name.to_string(),
     };
 
     if adopts.is_empty() {
-        return Ok(0);
+        return Ok(vec![]);
     }
 
     let ignored = load_ignored_docs(&project_id).await;
     let shared_base = shared_base_path();
     let reviews_dir = shared_reviews_path();
-    let local_content = read_project_local_content(&project_path).await;
+    let local_content = read_project_local_content(project_path).await;
     let categories = ["decisions", "patterns", "design", "agents", "stack"];
 
-    let mut count: u32 = 0;
+    let mut findings: Vec<DriftFinding> = Vec::new();
 
     for doc_ref in &adopts {
         let parts: Vec<&str> = doc_ref.split('/').collect();
@@ -2161,29 +2183,42 @@ pub async fn check_project_drift(project_name: String, project_path: String) -> 
             continue;
         }
 
-        // Find the shared doc in any category
         let mut shared_raw: Option<String> = None;
+        let mut found_category = String::new();
+        let mut found_path = PathBuf::new();
         for cat in &categories {
             let path = shared_base.join(cat).join(format!("{}.md", doc_id));
             if let Ok(content) = tokio::fs::read_to_string(&path).await {
                 shared_raw = Some(content);
+                found_category = cat.to_string();
+                found_path = path;
                 break;
             }
         }
 
         let Some(shared_content) = shared_raw else { continue; };
 
-        // Check pending update: review snapshot differs from current shared doc
+        let shared_body = parse_body(&shared_content);
+        let shared_snippet: String = shared_body.chars().take(400).collect();
+
+        // Stage 1: pending-update — snapshot differs from current shared doc
         let review_path = reviews_dir.join(&project_id).join(format!("{}.md", doc_id));
         if let Ok(snapshot) = tokio::fs::read_to_string(&review_path).await {
             if snapshot != shared_content {
-                count += 1;
+                findings.push(DriftFinding {
+                    doc_id: doc_id.to_string(),
+                    doc_ref: doc_ref.clone(),
+                    category: found_category,
+                    classification: "pending-update".to_string(),
+                    shared_path: found_path.to_string_lossy().to_string(),
+                    shared_snippet,
+                });
                 continue;
             }
         }
 
-        // Check for intentional override in local decisions
-        let curaye_decisions = PathBuf::from(&project_path).join(".curaye").join("decisions");
+        // Stage 2: intentional override — local decisions/ has superseded_by matching this ref
+        let curaye_decisions = PathBuf::from(project_path).join(".curaye").join("decisions");
         let mut has_override = false;
         if let Ok(mut entries) = tokio::fs::read_dir(&curaye_decisions).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
@@ -2206,13 +2241,115 @@ pub async fn check_project_drift(project_name: String, project_path: String) -> 
         }
         if has_override { continue; }
 
-        // Text comparison
+        // Stage 3: term-drift
         if compute_term_drift(&shared_content, &local_content) {
-            count += 1;
+            findings.push(DriftFinding {
+                doc_id: doc_id.to_string(),
+                doc_ref: doc_ref.clone(),
+                category: found_category,
+                classification: "drift".to_string(),
+                shared_path: found_path.to_string_lossy().to_string(),
+                shared_snippet,
+            });
         }
     }
 
-    Ok(count)
+    Ok(findings)
+}
+
+/// Count unresolved drift findings for a project (used for desktop sidebar badge).
+#[command]
+pub async fn check_project_drift(project_name: String, project_path: String) -> Result<u32, String> {
+    let findings = detect_drift_findings(&project_name, &project_path).await?;
+    Ok(findings.len() as u32)
+}
+
+/// Return full per-finding detail — called on demand when the Drift Panel opens.
+#[command]
+pub async fn get_drift_findings(project_name: String, project_path: String) -> Result<Vec<DriftFinding>, String> {
+    detect_drift_findings(&project_name, &project_path).await
+}
+
+/// Copy the current shared doc to the review snapshot, clearing the pending-update finding.
+#[command]
+pub async fn mark_reviewed(
+    project_name: String,
+    project_path: String,
+    doc_id: String,
+    shared_path: String,
+) -> Result<(), String> {
+    let project_id = get_project_id(&project_name, &project_path).await;
+    let shared_content = tokio::fs::read_to_string(&shared_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let review_dir = shared_reviews_path().join(&project_id);
+    tokio::fs::create_dir_all(&review_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    let review_path = review_dir.join(format!("{}.md", doc_id));
+    write_atomic(&review_path, shared_content.as_bytes()).await
+}
+
+/// Append this doc to drift-ignores.yaml so it is suppressed until the next sync.
+#[command]
+pub async fn ignore_drift_finding(
+    project_name: String,
+    project_path: String,
+    doc_id: String,
+) -> Result<(), String> {
+    let project_id = get_project_id(&project_name, &project_path).await;
+    let path = drift_ignores_path();
+
+    let mut file: DriftIgnoresFile = if path.exists() {
+        let content = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|e| e.to_string())?;
+        serde_yaml::from_str(&content).unwrap_or_default()
+    } else {
+        DriftIgnoresFile::default()
+    };
+
+    if file.ignores.iter().any(|e| e.project_id == project_id && e.doc_id == doc_id) {
+        return Ok(());
+    }
+
+    file.ignores.push(DriftIgnoreEntry { project_id, doc_id });
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let content = serde_yaml::to_string(&file).map_err(|e| e.to_string())?;
+    write_atomic(&path, content.as_bytes()).await
+}
+
+/// Create a stub override decision in decisions/ and return its path.
+/// Returns the existing path without overwriting if the file already exists.
+#[command]
+pub async fn create_override_decision(
+    curaye_path: String,
+    doc_id: String,
+    doc_ref: String,
+) -> Result<String, String> {
+    let decisions_dir = PathBuf::from(&curaye_path).join("decisions");
+    tokio::fs::create_dir_all(&decisions_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let file_path = decisions_dir.join(format!("override-{}.md", doc_id));
+    if file_path.exists() {
+        return Ok(file_path.to_string_lossy().to_string());
+    }
+
+    let today = chrono_today();
+    let content = format!(
+        "---\nid: override-{doc_id}\ntitle: \"Override: {doc_ref}\"\nstatus: active\nsuperseded_by: {doc_ref}\ncreated: {today}\nupdated: {today}\n---\n\n# Override: {doc_ref}\n\nThis project intentionally diverges from the shared layer document `{doc_ref}`.\n\n## Reason\n\n[Explain why this project's approach differs from the shared layer]\n"
+    );
+
+    write_atomic(&file_path, content.as_bytes()).await?;
+    Ok(file_path.to_string_lossy().to_string())
 }
 
 // ── Atomic write ──────────────────────────────────────────────────────────────

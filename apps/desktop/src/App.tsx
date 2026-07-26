@@ -11,6 +11,7 @@ import { BriefView } from "@/components/BriefView";
 import { AIPalette } from "@/components/AIPalette";
 import { BacklogView } from "@/components/BacklogView";
 import { ReleaseView } from "@/components/ReleaseView";
+import { DriftPanel } from "@/components/DriftPanel";
 
 export function App() {
   const theme = useConfigStore((s) => s.theme);
@@ -73,6 +74,7 @@ export function App() {
       <AIPalette />
       {view === "backlog" && <BacklogView />}
       {view === "releases" && <ReleaseView />}
+      <DriftPanel />
     </div>
   );
 }

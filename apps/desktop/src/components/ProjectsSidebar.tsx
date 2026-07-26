@@ -24,6 +24,7 @@ type VirtualAnchor = { getBoundingClientRect: () => DOMRect };
 
 function ProjectItem({ project, selected }: { project: RegistryProject; selected: boolean }) {
   const selectProject = useProjectStore((s) => s.selectProject);
+  const openDriftPanel = useProjectStore((s) => s.openDriftPanel);
   const loadTree = useTreeStore((s) => s.loadTree);
   const [menuOpen, setMenuOpen] = useState(false);
   const [anchor, setAnchor] = useState<VirtualAnchor | null>(null);
@@ -65,9 +66,23 @@ function ProjectItem({ project, selected }: { project: RegistryProject; selected
         <span className="flex-1 truncate">{project.name}</span>
         {(project.drift_count ?? 0) > 0 && (
           <span
-            className="inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 bg-amber-400"
-            title={`${project.drift_count} drift finding${(project.drift_count ?? 0) === 1 ? "" : "s"}`}
-          />
+            role="button"
+            tabIndex={0}
+            className="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded cursor-pointer hover:bg-amber-400/20 transition-colors"
+            title={`${project.drift_count} drift finding${(project.drift_count ?? 0) === 1 ? "" : "s"} — click to review`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void openDriftPanel(project.name);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                void openDriftPanel(project.name);
+              }
+            }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          </span>
         )}
         {(project.ready_count ?? 0) > 0 && (
           <span className={cn(

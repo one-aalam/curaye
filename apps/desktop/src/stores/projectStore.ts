@@ -4,9 +4,19 @@ import { invoke } from "@tauri-apps/api/core";
 export interface RegistryProject {
   name: string;
   curaye_path: string;
+  id: string;
   sync_status?: "clean" | "ahead" | "behind" | "diverged";
   ready_count?: number;
   drift_count?: number;
+}
+
+export interface DriftFinding {
+  doc_id: string;
+  doc_ref: string;
+  category: string;
+  classification: "drift" | "pending-update";
+  shared_path: string;
+  shared_snippet: string;
 }
 
 interface ProjectState {
@@ -14,9 +24,16 @@ interface ProjectState {
   selectedProjectId: string | null;
   loading: boolean;
   error: string | null;
+  driftPanelOpen: boolean;
+  driftPanelProject: RegistryProject | null;
+  driftFindings: DriftFinding[];
+  driftLoading: boolean;
   loadProjects: () => Promise<void>;
   selectProject: (name: string) => void;
   refreshSyncStatus: () => Promise<void>;
+  openDriftPanel: (projectName: string) => Promise<void>;
+  closeDriftPanel: () => void;
+  removeFinding: (docId: string) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -24,6 +41,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   selectedProjectId: null,
   loading: false,
   error: null,
+  driftPanelOpen: false,
+  driftPanelProject: null,
+  driftFindings: [],
+  driftLoading: false,
 
   loadProjects: async () => {
     set({ loading: true, error: null });
@@ -64,6 +85,47 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         void useBriefStore.getState().recordOpened(project.curaye_path);
       });
     }
+  },
+
+  openDriftPanel: async (projectName: string) => {
+    const { projects } = get();
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) return;
+    const projectPath = project.curaye_path.replace(/\/\.curaye$/, "");
+    set({ driftPanelOpen: true, driftPanelProject: project, driftFindings: [], driftLoading: true });
+    try {
+      const findings = await invoke<DriftFinding[]>("get_drift_findings", {
+        projectName: project.name,
+        projectPath,
+      });
+      set({ driftFindings: findings, driftLoading: false });
+    } catch {
+      set({ driftLoading: false });
+    }
+  },
+
+  closeDriftPanel: () => {
+    const { driftPanelProject } = get();
+    set({ driftPanelOpen: false, driftPanelProject: null, driftFindings: [] });
+    if (driftPanelProject) {
+      const projectPath = driftPanelProject.curaye_path.replace(/\/\.curaye$/, "");
+      void invoke<number>("check_project_drift", {
+        projectName: driftPanelProject.name,
+        projectPath,
+      }).then((drift_count) => {
+        set((state) => ({
+          projects: state.projects.map((p) =>
+            p.name === driftPanelProject.name ? { ...p, drift_count } : p
+          ),
+        }));
+      }).catch(() => {});
+    }
+  },
+
+  removeFinding: (docId: string) => {
+    set((state) => ({
+      driftFindings: state.driftFindings.filter((f) => f.doc_id !== docId),
+    }));
   },
 
   refreshSyncStatus: async () => {
