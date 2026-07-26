@@ -44,6 +44,13 @@ curaye list --tag infra     # Filter by tag
 curaye status <id> <status> # Update a spec's status
 curaye ship <id>            # Mark a spec as shipped
 curaye ship <id> --release v1.0.0
+
+# Release management
+curaye release new "v1.0.0"
+curaye release list
+curaye release assign <spec-id> <release-id>
+curaye release board <release-id>
+curaye release ship <release-id>  # Ship all done specs and close the release
 ```
 
 ### Sync

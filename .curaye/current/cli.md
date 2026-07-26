@@ -45,6 +45,7 @@ updated: 2026-07-24
 | `curaye release list [--project <id>]` | Lists all releases for a project (or all registered projects) with id, title, status, target date, and `done/total` spec count. |
 | `curaye release assign <spec-id> <release-id> [--project <id>]` | Sets the `release` field in the spec's frontmatter. Replaces any existing assignment — a spec can only belong to one release. |
 | `curaye release board <release-id> [--project <id>]` | Prints an ASCII kanban board to stdout with four columns (Draft / Ready / Building / Done), showing all non-shelved specs assigned to the release. |
+| `curaye release ship <release-id> [--project <id>]` | Ships all `status: done` specs in the release: creates a `shipped/` document for each, removes their `planned/` files, and marks the release `status: shipped`. Errors if the release is already shipped or has no done specs. Prompts for confirmation in interactive mode; skips the prompt with `--json`. |
 
 ## Sync
 

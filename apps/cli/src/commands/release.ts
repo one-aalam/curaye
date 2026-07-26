@@ -1,4 +1,7 @@
 import type { Command } from 'commander'
+import path from 'path'
+import fs from 'fs/promises'
+import { confirm, isCancel } from '@clack/prompts'
 import { scanProject, ReleaseManager } from '@curaye/core'
 import { ProjectRegistry } from '@curaye/core'
 import type { PlannedFrontmatter } from '@curaye/protocol'
@@ -218,5 +221,87 @@ export function registerRelease(program: Command): void {
       }
 
       renderKanban(releaseId, release.title, specs)
+    })
+
+  releaseCmd
+    .command('ship <release-id>')
+    .description('Ship all done specs in a release and mark the release shipped')
+    .option('--project <id>', 'Project id')
+    .action(async (releaseId: string, opts: { project?: string }) => {
+      const project = await resolveProject(opts.project)
+      const curiyePath = ProjectRegistry.curiyePath(project)
+
+      const releases = await ReleaseManager.list(curiyePath)
+      const release = releases.find((r) => r.id === releaseId)
+      if (!release) die(`Release '${releaseId}' not found. Run 'curaye release list' to see available releases.`)
+      if (release.status === 'shipped') die(`Release '${releaseId}' is already shipped.`)
+
+      const index = await scanProject(curiyePath)
+      const doneSpecs = index.planned.filter((s) => {
+        const fm = s.frontmatter as PlannedFrontmatter
+        return (fm.release ?? '') === releaseId && fm.status === 'done' && !!s.path
+      })
+
+      if (doneSpecs.length === 0) {
+        die(`No specs with status 'done' found in release '${releaseId}'. Mark specs done before shipping the release.`)
+      }
+
+      if (!isJsonMode()) {
+        const label = doneSpecs.length === 1 ? '1 spec' : `${doneSpecs.length} specs`
+        const ok = await confirm({ message: `Ship ${label} and mark release '${releaseId}' shipped?` })
+        if (isCancel(ok) || !ok) {
+          printLine('Aborted.')
+          return
+        }
+      }
+
+      const shippedDir = path.join(curiyePath, 'shipped')
+      await fs.mkdir(shippedDir, { recursive: true })
+
+      const results: Array<{ id: string; shippedPath: string }> = []
+
+      for (const spec of doneSpecs) {
+        const fm = spec.frontmatter as PlannedFrontmatter
+        const specId = spec.id ?? path.basename(spec.path!, '.md')
+        const title = fm.title ?? specId
+        const shippedPath = path.join(shippedDir, `${specId}.md`)
+
+        const content = `---
+id: ${specId}
+title: "${title}"
+shipped: ${today()}
+release: "${releaseId}"
+spec_ref: "${specId}"
+---
+
+# ${title}
+
+> Shipped in ${releaseId} on ${today()}
+
+## What shipped
+
+## Changes to current/
+
+## Notes
+`
+        const tmp = shippedPath + '.tmp'
+        await fs.writeFile(tmp, content, 'utf8')
+        await fs.rename(tmp, shippedPath)
+        await fs.unlink(spec.path!)
+
+        results.push({ id: specId, shippedPath })
+      }
+
+      await ReleaseManager.markReleaseStatus(release.path, 'shipped', today())
+
+      if (isJsonMode()) {
+        printJson({ releaseId, shipped: results, releasePath: release.path })
+        return
+      }
+
+      for (const r of results) {
+        printLine(`  ✓ ${r.id} → ${r.shippedPath}`)
+      }
+      printLine(`\nRelease '${releaseId}' marked shipped. Update current/ docs to reflect what landed.`)
     })
 }
