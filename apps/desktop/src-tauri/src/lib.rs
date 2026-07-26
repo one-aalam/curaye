@@ -12,6 +12,8 @@ use commands::{
     search_semantic, serialize_document, set_last_opened, ship_release, start_ai_stream,
     sync_project, unlink_project, update_release_status, update_spec_status, write_ai_config,
     write_document, write_registry, write_shared_doc, AiStreamState,
+    list_toolkit_presets, get_toolkit_preset, write_toolkit_preset, delete_toolkit_preset,
+    match_toolkit_preset,
 };
 
 pub fn run() {
@@ -66,6 +68,11 @@ pub fn run() {
             write_shared_doc,
             create_shared_doc,
             get_notification_count,
+            list_toolkit_presets,
+            get_toolkit_preset,
+            write_toolkit_preset,
+            delete_toolkit_preset,
+            match_toolkit_preset,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

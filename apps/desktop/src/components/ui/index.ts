@@ -1,3 +1,4 @@
+export { GlassCheckboxGroup, type CheckboxGroupOption } from "./checkbox-group";
 export { ColorSwatch } from "./color-swatch";
 export { DialogRoot, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose, DialogTrigger } from "./dialog";
 export { DrawerRoot, DrawerContent, DrawerClose, DrawerTitle, DrawerDescription, DrawerTrigger } from "./drawer";
@@ -5,6 +6,7 @@ export { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator } from "./m
 export { NativeSlider } from "./native-slider";
 export { PopoverRoot, PopoverTrigger, PopoverContent, PopoverClose } from "./popover";
 export { ProgressRing } from "./progress-ring";
+export { GlassRadioGroup, type RadioGroupOption } from "./radio-group";
 export { Select, type SelectOption } from "./select";
 export { Switch } from "./switch";
 export { Tabs, TabsRoot, TabsList, TabsTab, TabsPanel } from "./tabs";

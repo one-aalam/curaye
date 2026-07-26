@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ArrowLeft, Plus, X, Loader2 } from "lucide-react";
+import { ToolkitFormModal } from "@/components/ToolkitFormModal";
+import { ArrowLeft, Plus, X, Loader2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   useSharedLayerStore,
@@ -8,6 +9,10 @@ import {
   type SharedDocSummary,
 } from "@/stores/sharedLayerStore";
 import { useProjectStore } from "@/stores/projectStore";
+import {
+  useToolkitStore,
+  type ToolkitPreset,
+} from "@/stores/toolkitStore";
 
 // ── Frontmatter parser (lightweight, display-only) ───────────────────────────
 
@@ -264,6 +269,177 @@ function MetadataStrip({ content }: { content: string }) {
   );
 }
 
+// ── Toolkit preset card ───────────────────────────────────────────────────────
+
+function ToolkitCard({
+  preset,
+  onEdit,
+  onDelete,
+  deleting,
+}: {
+  preset: ToolkitPreset;
+  onEdit: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const toolList = [preset.tools.formatter, preset.tools.linter, preset.tools.test, preset.tools.e2e]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="rounded-md border border-border/40 bg-card/30 p-3 space-y-2 hover:border-border/60 transition-colors">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-mono font-medium text-foreground truncate">{preset.id}</p>
+          <p className="text-[11px] text-muted-foreground truncate">{preset.title}</p>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Edit preset"
+          >
+            <Pencil size={11} />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
+            title="Delete preset"
+          >
+            {deleting ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        {preset.app_type && (
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary/80">
+            {preset.app_type}
+          </span>
+        )}
+        {preset.runtime.map((r) => (
+          <span key={r} className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            {r}
+          </span>
+        ))}
+      </div>
+
+      {preset.framework.length > 0 && (
+        <p className="text-[10px] text-muted-foreground/70">
+          <span className="text-muted-foreground/50">Frameworks: </span>
+          {preset.framework.join(", ")}
+        </p>
+      )}
+
+      {preset.starter_kit && (
+        <div>
+          <p className="text-[10px] text-muted-foreground/70">
+            <span className="text-muted-foreground/50">Starter kit: </span>
+            {preset.starter_kit}
+          </p>
+          {preset.starter_kit_cmd && (
+            <p className="font-mono text-[10px] text-muted-foreground/50 truncate">{preset.starter_kit_cmd}</p>
+          )}
+        </div>
+      )}
+
+      {preset.design_system && (
+        <p className="text-[10px] text-muted-foreground/70">
+          <span className="text-muted-foreground/50">Design system: </span>
+          {preset.design_system}
+        </p>
+      )}
+
+      {toolList && (
+        <p className="text-[10px] text-muted-foreground/70">
+          <span className="text-muted-foreground/50">Tools: </span>
+          {toolList}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Stack tab — toolkit cards + plain docs ────────────────────────────────────
+
+function StackTabContent({
+  docs,
+  selectedDocId,
+  onSelectDoc,
+}: {
+  docs: SharedDocSummary[];
+  selectedDocId: string | null;
+  onSelectDoc: (id: string) => void;
+}) {
+  const { presets, loading, deletingId, loadPresets, openAddForm, openEditForm, deletePreset } =
+    useToolkitStore();
+
+  useEffect(() => {
+    void loadPresets();
+  }, [loadPresets]);
+
+  // Docs that have no matching preset id
+  const presetIds = new Set(presets.map((p) => p.id));
+  const plainDocs = docs.filter((d) => !presetIds.has(d.id));
+
+  return (
+    <div className="flex-1 overflow-y-auto py-2 px-1.5 space-y-3">
+      {/* Add preset button */}
+      <button
+        type="button"
+        onClick={openAddForm}
+        className="w-full flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border/50 px-3 py-2 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+      >
+        <Plus size={11} />
+        Add preset
+      </button>
+
+      {/* Preset cards */}
+      {loading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 size={16} className="animate-spin text-muted-foreground" />
+        </div>
+      ) : presets.length === 0 && plainDocs.length === 0 ? (
+        <p className="py-4 text-center text-[11px] text-muted-foreground">
+          No stack documents yet. Add a preset or create a stack document.
+        </p>
+      ) : (
+        <>
+          {presets.map((preset) => (
+            <ToolkitCard
+              key={preset.id}
+              preset={preset}
+              onEdit={() => openEditForm(preset)}
+              onDelete={() => void deletePreset(preset.id)}
+              deleting={deletingId === preset.id}
+            />
+          ))}
+
+          {/* Plain stack docs without toolkit fields */}
+          {plainDocs.length > 0 && (
+            <div>
+              <p className="px-1 mb-1 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+                Stack docs (no preset)
+              </p>
+              {plainDocs.map((doc) => (
+                <DocRow
+                  key={doc.id}
+                  doc={doc}
+                  selected={selectedDocId === doc.id}
+                  onSelect={() => onSelectDoc(doc.id)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export function SharedLayerPanel() {
@@ -302,6 +478,7 @@ export function SharedLayerPanel() {
 
   if (!sharedLayerOpen) return null;
 
+  const isStackTab = selectedCategory === "stack";
   const filteredDocs = docs.filter((d) => d.category === selectedCategory);
   const docCountByCategory = Object.fromEntries(
     SHARED_CATEGORIES.map((cat) => [cat, docs.filter((d) => d.category === cat).length]),
@@ -364,41 +541,52 @@ export function SharedLayerPanel() {
             ))}
           </div>
 
-          {/* New doc form (inline, at top of list) */}
-          {showNewDocForm && <NewDocForm />}
+          {/* Stack tab: cards view */}
+          {isStackTab ? (
+            <StackTabContent
+              docs={filteredDocs}
+              selectedDocId={selectedDocId}
+              onSelectDoc={(id) => void selectDoc(id, "stack")}
+            />
+          ) : (
+            <>
+              {/* New doc form (inline, at top of list) */}
+              {showNewDocForm && <NewDocForm />}
 
-          {/* Doc list */}
-          <div className="flex-1 overflow-y-auto py-1 px-1.5">
-            {docsLoading && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 size={16} className="animate-spin text-muted-foreground" />
-              </div>
-            )}
-            {!docsLoading && filteredDocs.length === 0 && (
-              <div className="py-6 px-3 text-center space-y-2">
-                <p className="text-[11px] text-muted-foreground">
-                  No shared documents in this category yet
-                </p>
-                {!showNewDocForm && (
-                  <button
-                    type="button"
-                    onClick={showNewForm}
-                    className="text-[11px] text-primary hover:underline"
-                  >
-                    Create the first one →
-                  </button>
+              {/* Doc list */}
+              <div className="flex-1 overflow-y-auto py-1 px-1.5">
+                {docsLoading && (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                  </div>
                 )}
+                {!docsLoading && filteredDocs.length === 0 && (
+                  <div className="py-6 px-3 text-center space-y-2">
+                    <p className="text-[11px] text-muted-foreground">
+                      No shared documents in this category yet
+                    </p>
+                    {!showNewDocForm && (
+                      <button
+                        type="button"
+                        onClick={showNewForm}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        Create the first one →
+                      </button>
+                    )}
+                  </div>
+                )}
+                {!docsLoading && filteredDocs.map((doc) => (
+                  <DocRow
+                    key={doc.id}
+                    doc={doc}
+                    selected={selectedDocId === doc.id && selectedCategory === doc.category}
+                    onSelect={() => void selectDoc(doc.id, doc.category)}
+                  />
+                ))}
               </div>
-            )}
-            {!docsLoading && filteredDocs.map((doc) => (
-              <DocRow
-                key={doc.id}
-                doc={doc}
-                selected={selectedDocId === doc.id && selectedCategory === doc.category}
-                onSelect={() => void selectDoc(doc.id, doc.category)}
-              />
-            ))}
-          </div>
+            </>
+          )}
         </div>
 
         {/* Right column */}
@@ -460,12 +648,15 @@ export function SharedLayerPanel() {
           ) : (
             <div className="flex flex-1 items-center justify-center">
               <p className="text-sm text-muted-foreground/50">
-                Select a document to view and edit
+                {isStackTab ? "Select a stack doc to view and edit" : "Select a document to view and edit"}
               </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Toolkit preset form modal */}
+      <ToolkitFormModal />
     </div>
   );
 }

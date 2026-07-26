@@ -2736,6 +2736,342 @@ pub async fn get_notification_count(project_name: String) -> Result<usize, Strin
     Ok(count)
 }
 
+// ── Toolkit registry ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolkitTools {
+    pub formatter:       Option<String>,
+    pub linter:          Option<String>,
+    pub test:            Option<String>,
+    pub e2e:             Option<String>,
+    pub package_manager: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolkitPreset {
+    pub id:               String,
+    pub title:            String,
+    pub runtime:          Vec<String>,
+    pub app_type:         Option<String>,
+    pub framework:        Vec<String>,
+    pub starter_kit:      Option<String>,
+    pub starter_kit_cmd:  Option<String>,
+    pub design_system:    Option<String>,
+    pub tools:            ToolkitTools,
+    pub body:             String,
+    pub file_path:        String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolkitMatch {
+    pub preset: ToolkitPreset,
+    pub score:  u32,
+}
+
+fn parse_toolkit_preset(raw: &str, file_path: &Path) -> Option<ToolkitPreset> {
+    let fm_map = parse_frontmatter_quick(raw);
+
+    let get_str = |key: &str| -> Option<String> {
+        fm_map.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    let get_list = |key: &str| -> Vec<String> {
+        match fm_map.get(key) {
+            Some(serde_yaml::Value::Sequence(seq)) => seq
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect(),
+            Some(serde_yaml::Value::String(s)) => vec![s.clone()],
+            _ => vec![],
+        }
+    };
+
+    let runtime = get_list("runtime");
+    let app_type = get_str("app_type");
+    let framework = get_list("framework");
+    let starter_kit = get_str("starter_kit");
+    let starter_kit_cmd = get_str("starter_kit_cmd");
+    let design_system = get_str("design_system");
+
+    let tools_val = fm_map.get("tools");
+    let tools = ToolkitTools {
+        formatter:       tools_val.and_then(|t| t.get("formatter")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+        linter:          tools_val.and_then(|t| t.get("linter")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+        test:            tools_val.and_then(|t| t.get("test")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+        e2e:             tools_val.and_then(|t| t.get("e2e")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+        package_manager: tools_val.and_then(|t| t.get("package_manager")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+    };
+
+    let has_toolkit_fields = !runtime.is_empty()
+        || app_type.is_some()
+        || !framework.is_empty()
+        || starter_kit.is_some()
+        || starter_kit_cmd.is_some()
+        || design_system.is_some()
+        || tools.formatter.is_some()
+        || tools.linter.is_some()
+        || tools.test.is_some()
+        || tools.e2e.is_some()
+        || tools.package_manager.is_some();
+
+    if !has_toolkit_fields {
+        return None;
+    }
+
+    let id = get_str("id").unwrap_or_else(|| {
+        file_path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_string()
+    });
+    let title = get_str("title").unwrap_or_else(|| id.clone());
+
+    let body = {
+        let stripped = raw.trim_start_matches('\u{feff}');
+        if stripped.starts_with("---") {
+            let rest = &stripped[3..];
+            if let Some(end) = rest.find("\n---") {
+                rest[end + 4..].trim_start_matches('\n').to_string()
+            } else {
+                String::new()
+            }
+        } else {
+            raw.to_string()
+        }
+    };
+
+    Some(ToolkitPreset {
+        id,
+        title,
+        runtime,
+        app_type,
+        framework,
+        starter_kit,
+        starter_kit_cmd,
+        design_system,
+        tools,
+        body,
+        file_path: file_path.to_string_lossy().to_string(),
+    })
+}
+
+fn stack_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".curaye")
+        .join("shared")
+        .join("stack")
+}
+
+#[command]
+pub async fn list_toolkit_presets() -> Result<Vec<ToolkitPreset>, String> {
+    let dir = stack_dir();
+    if !dir.is_dir() {
+        return Ok(vec![]);
+    }
+    let Ok(mut entries) = tokio::fs::read_dir(&dir).await else {
+        return Ok(vec![]);
+    };
+    let mut files: Vec<PathBuf> = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("md") {
+            files.push(path);
+        }
+    }
+    files.sort();
+
+    let mut presets = Vec::new();
+    for file_path in files {
+        let Ok(raw) = tokio::fs::read_to_string(&file_path).await else { continue };
+        if let Some(preset) = parse_toolkit_preset(&raw, &file_path) {
+            presets.push(preset);
+        }
+    }
+    Ok(presets)
+}
+
+#[command]
+pub async fn get_toolkit_preset(id: String) -> Result<Option<ToolkitPreset>, String> {
+    let file_path = stack_dir().join(format!("{}.md", id));
+    if !file_path.exists() {
+        return Ok(None);
+    }
+    let raw = tokio::fs::read_to_string(&file_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(parse_toolkit_preset(&raw, &file_path))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ToolkitPresetInput {
+    pub id:               String,
+    pub title:            String,
+    pub runtime:          Vec<String>,
+    pub app_type:         Option<String>,
+    pub framework:        Vec<String>,
+    pub starter_kit:      Option<String>,
+    pub starter_kit_cmd:  Option<String>,
+    pub design_system:    Option<String>,
+    pub tools:            ToolkitToolsInput,
+    pub body:             String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ToolkitToolsInput {
+    pub formatter:       Option<String>,
+    pub linter:          Option<String>,
+    pub test:            Option<String>,
+    pub e2e:             Option<String>,
+    pub package_manager: Option<String>,
+}
+
+#[command]
+pub async fn write_toolkit_preset(preset: ToolkitPresetInput) -> Result<(), String> {
+    let dir = stack_dir();
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
+    let file_path = dir.join(format!("{}.md", preset.id));
+
+    let mut lines = vec![
+        "---".to_string(),
+        format!("id: {}", preset.id),
+        format!("title: \"{}\"", preset.title),
+    ];
+    if !preset.runtime.is_empty() {
+        lines.push(format!("runtime: [{}]", preset.runtime.join(", ")));
+    }
+    if let Some(ref at) = preset.app_type {
+        if !at.is_empty() {
+            lines.push(format!("app_type: {}", at));
+        }
+    }
+    if !preset.framework.is_empty() {
+        lines.push(format!("framework: [{}]", preset.framework.join(", ")));
+    }
+    if let Some(ref sk) = preset.starter_kit {
+        if !sk.is_empty() {
+            lines.push(format!("starter_kit: {}", sk));
+        }
+    }
+    if let Some(ref cmd) = preset.starter_kit_cmd {
+        if !cmd.is_empty() {
+            lines.push(format!("starter_kit_cmd: {}", cmd));
+        }
+    }
+    if let Some(ref ds) = preset.design_system {
+        if !ds.is_empty() {
+            lines.push(format!("design_system: {}", ds));
+        }
+    }
+    let has_tools = preset.tools.formatter.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
+        || preset.tools.linter.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
+        || preset.tools.test.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
+        || preset.tools.e2e.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
+        || preset.tools.package_manager.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
+    if has_tools {
+        lines.push("tools:".to_string());
+        if let Some(ref pm) = preset.tools.package_manager { if !pm.is_empty() { lines.push(format!("  package_manager: {}", pm)); } }
+        if let Some(ref f) = preset.tools.formatter        { if !f.is_empty()  { lines.push(format!("  formatter: {}", f));        } }
+        if let Some(ref l) = preset.tools.linter           { if !l.is_empty()  { lines.push(format!("  linter: {}", l));           } }
+        if let Some(ref t) = preset.tools.test             { if !t.is_empty()  { lines.push(format!("  test: {}", t));             } }
+        if let Some(ref e) = preset.tools.e2e              { if !e.is_empty()  { lines.push(format!("  e2e: {}", e));              } }
+    }
+    lines.push("adopted_by: []".to_string());
+    lines.push("---".to_string());
+    lines.push(String::new());
+    let body = if preset.body.is_empty() {
+        "> Add rationale and notes here.".to_string()
+    } else {
+        preset.body.clone()
+    };
+    lines.push(body);
+    lines.push(String::new());
+
+    let content = lines.join("\n");
+    write_atomic(&file_path, content.as_bytes()).await
+}
+
+#[command]
+pub async fn delete_toolkit_preset(id: String) -> Result<(), String> {
+    let file_path = stack_dir().join(format!("{}.md", id));
+    if !file_path.exists() {
+        return Err(format!("Toolkit preset '{}' not found", id));
+    }
+    tokio::fs::remove_file(&file_path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[command]
+pub async fn match_toolkit_preset(stack_md_content: String) -> Result<Vec<ToolkitMatch>, String> {
+    let presets = list_toolkit_presets().await?;
+    if presets.is_empty() {
+        return Ok(vec![]);
+    }
+
+    struct RuntimeGroup { id: &'static str, tokens: &'static [&'static str] }
+    struct AppTypeGroup { id: &'static str, tokens: &'static [&'static str] }
+
+    let runtime_groups: &[RuntimeGroup] = &[
+        RuntimeGroup { id: "node",   tokens: &["node", "npm", "pnpm", "yarn", "bun"] },
+        RuntimeGroup { id: "rust",   tokens: &["rust", "cargo"] },
+        RuntimeGroup { id: "python", tokens: &["python", "pip", "uv", "poetry"] },
+        RuntimeGroup { id: "go",     tokens: &["go", "golang"] },
+        RuntimeGroup { id: "bun",    tokens: &["bun"] },
+        RuntimeGroup { id: "java",   tokens: &["java", "maven", "gradle"] },
+        RuntimeGroup { id: "dotnet", tokens: &[".net", "c#", "dotnet"] },
+        RuntimeGroup { id: "ruby",   tokens: &["ruby", "bundler", "rails"] },
+    ];
+    let app_type_groups: &[AppTypeGroup] = &[
+        AppTypeGroup { id: "desktop", tokens: &["tauri", "electron"] },
+        AppTypeGroup { id: "web",     tokens: &["next", "astro", "remix", "sveltekit"] },
+        AppTypeGroup { id: "cli",     tokens: &["cli", "commander", "clap", "yargs", "typer", "cobra"] },
+        AppTypeGroup { id: "api",     tokens: &["express", "fastify", "fastapi", "axum", "gin", "hono"] },
+        AppTypeGroup { id: "mobile",  tokens: &["react native", "expo", "flutter"] },
+        AppTypeGroup { id: "library", tokens: &["library", "package", "crate", "gem"] },
+    ];
+
+    let lower = stack_md_content.to_lowercase();
+
+    let detected_runtimes: Vec<&str> = runtime_groups
+        .iter()
+        .filter(|g| g.tokens.iter().any(|t| lower.contains(t)))
+        .map(|g| g.id)
+        .collect();
+
+    let detected_app_type = app_type_groups
+        .iter()
+        .find(|g| g.tokens.iter().any(|t| lower.contains(t)))
+        .map(|g| g.id);
+
+    let mut matches: Vec<ToolkitMatch> = presets
+        .into_iter()
+        .filter_map(|preset| {
+            let mut score: u32 = 0;
+
+            if let Some(at) = &preset.app_type {
+                if detected_app_type.map_or(false, |d| d == at.as_str()) {
+                    score += 4;
+                }
+            }
+
+            for rt in &preset.runtime {
+                if detected_runtimes.contains(&rt.as_str()) {
+                    score += 2;
+                }
+            }
+
+            for fw in &preset.framework {
+                if lower.contains(&fw.to_lowercase().as_str()) {
+                    score += 2;
+                }
+            }
+
+            if score == 0 { None } else { Some(ToolkitMatch { preset, score }) }
+        })
+        .collect();
+
+    matches.sort_by(|a, b| b.score.cmp(&a.score));
+    Ok(matches)
+}
+
 // ── Atomic write ──────────────────────────────────────────────────────────────
 
 async fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {

@@ -3,7 +3,7 @@ name: curaye-bootstrap
 description: Bootstrap a new project with a .curaye/ folder. Use when starting a project that has never been tracked under Curaye. Mines the active session context first — if you have been brainstorming, the answers are already in the conversation. Falls back to a targeted interview only for genuine gaps. Generates multiple planned specs from session output, not just one. Optionally pass the project path as an argument.
 compatibility: Designed for Claude Code. Requires the curaye CLI installed.
 metadata:
-  version: "0.2"
+  version: "0.3"
 ---
 
 Bootstrap a new or blank project with a `.curaye/` folder. Mines session context first, interviews only for gaps, and produces a complete initial scaffold including all planned specs surfaced in the conversation.
@@ -122,7 +122,16 @@ For each shared decision selected in Step 3:
 curaye link <path>
 ```
 
-## Step 8 — Report
+## Step 8 — Check for a toolkit preset
+
+Run:
+```bash
+curaye shared list --category stack
+```
+
+If any shared stack documents exist, check whether any have a `starter_kit_cmd` frontmatter field that matches the detected stack. If a match is found, note it in the report so the user knows scaffold will offer it automatically.
+
+## Step 9 — Report
 
 ```
 Bootstrap complete.
@@ -130,9 +139,30 @@ Bootstrap complete.
   .curaye/ created at: <path>
   prd.md, stack.md, product.md: written
   Planned specs: <N> (<list of ids and titles>)
-  Decisions recorded: <N> (<list>) 
+  Decisions recorded: <N> (<list>)
   Shared decisions seeded: <list or "none">
   Registered as: <project-id>
 ```
 
-"Run `/curaye-build <first-spec-id>` to start building, or `/curaye-brief` to review the full picture first."
+**Next steps — choose your path:**
+
+If you want to generate the project skeleton now (directories, README, starter kit, shared patterns and agents):
+
+```bash
+curaye scaffold <path>          # interactive — offers generator, patterns, agents
+curaye scaffold <path> --git    # same, plus git init + initial commit
+```
+
+If you want to go straight to building:
+
+```bash
+/curaye-build <first-spec-id>
+```
+
+Or review the full picture first:
+
+```bash
+/curaye-brief
+```
+
+If a toolkit preset was found in Step 8, mention it: "Your `<preset-id>` preset matches this stack — scaffold will offer `<starter_kit>` automatically."

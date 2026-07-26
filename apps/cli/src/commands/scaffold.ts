@@ -3,10 +3,12 @@ import path from 'path'
 import fs from 'fs/promises'
 import os from 'os'
 import { execSync, spawnSync } from 'child_process'
-import { intro, outro, log, confirm, multiselect, isCancel, spinner } from '@clack/prompts'
+import { intro, outro, log, confirm, multiselect, select, isCancel, spinner } from '@clack/prompts'
 import { readAiConfig, isAvailable, createProvider } from '@curaye/ai'
 import type { Provider } from '@curaye/ai'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
+import { readAllPresets } from './toolkit.js'
+import type { ToolkitPreset } from './toolkit.js'
 
 // ---------------------------------------------------------------------------
 // Built-in generator table
@@ -42,6 +44,12 @@ interface StarterKitResult {
   skipped?: boolean
 }
 
+interface ToolkitMatchInfo {
+  id: string | null
+  score: number
+  source: 'preset' | 'builtin' | null
+}
+
 interface ScaffoldResult {
   path: string
   starter_kit: StarterKitResult | null
@@ -49,48 +57,122 @@ interface ScaffoldResult {
   directories: string[]
   patterns_applied: string[]
   git: { initialised: boolean; committed: boolean; sha: string } | null
+  toolkit_match: ToolkitMatchInfo
 }
 
 // ---------------------------------------------------------------------------
-// Shared stack detection
+// Toolkit scoring
 // ---------------------------------------------------------------------------
 
-async function detectFromSharedStack(stackContent: string): Promise<{ name: string; command: string } | null> {
-  const sharedStackDir = path.join(os.homedir(), '.curaye', 'shared', 'stack')
-  let entries: string[]
-  try {
-    entries = await fs.readdir(sharedStackDir)
-  } catch {
-    return null
-  }
+interface RuntimeGroup {
+  id: string
+  tokens: string[]
+}
 
-  for (const entry of entries) {
-    if (!entry.endsWith('.md')) continue
-    const filePath = path.join(sharedStackDir, entry)
-    const raw = await fs.readFile(filePath, 'utf8').catch(() => '')
-    if (!raw) continue
+interface AppTypeGroup {
+  id: string
+  tokens: string[]
+}
 
-    // Extract frontmatter body
-    const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/)
-    if (!fmMatch) continue
-    const fm = fmMatch[1] ?? ''
+const RUNTIME_GROUPS: RuntimeGroup[] = [
+  { id: 'node', tokens: ['node', 'npm', 'pnpm', 'yarn', 'bun'] },
+  { id: 'rust', tokens: ['rust', 'cargo'] },
+  { id: 'python', tokens: ['python', 'pip', 'uv', 'poetry'] },
+  { id: 'go', tokens: ['go', 'golang'] },
+  { id: 'bun', tokens: ['bun'] },
+  { id: 'java', tokens: ['java', 'maven', 'gradle'] },
+  { id: 'dotnet', tokens: ['.net', 'c#', 'dotnet'] },
+  { id: 'ruby', tokens: ['ruby', 'bundler', 'rails'] },
+]
 
-    const kitMatch = fm.match(/^starter_kit:\s*(.+)$/m)
-    const cmdMatch = fm.match(/^starter_kit_cmd:\s*(.+)$/m)
-    if (!kitMatch || !cmdMatch) continue
+const APP_TYPE_GROUPS: AppTypeGroup[] = [
+  { id: 'desktop', tokens: ['tauri', 'electron'] },
+  { id: 'web', tokens: ['next', 'astro', 'remix', 'sveltekit'] },
+  { id: 'cli', tokens: ['cli', 'commander', 'clap', 'yargs', 'typer', 'cobra'] },
+  { id: 'api', tokens: ['express', 'fastify', 'fastapi', 'axum', 'gin', 'hono'] },
+  { id: 'mobile', tokens: ['react native', 'expo', 'flutter'] },
+  { id: 'library', tokens: ['library', 'package', 'crate', 'gem'] },
+]
 
-    const name = kitMatch[1]!.trim()
-    const command = cmdMatch[1]!.trim()
+function detectRuntimes(stackContent: string): string[] {
+  const lower = stackContent.toLowerCase()
+  return RUNTIME_GROUPS.filter((g) => g.tokens.some((t) => lower.includes(t))).map((g) => g.id)
+}
 
-    // Check if stack.md content matches this shared doc's core content (case-insensitive)
-    // Match by checking if the shared stack file's keywords appear in the project stack.md
-    const sharedSignal = entry.replace(/\.md$/, '').toLowerCase()
-    const stackLower = stackContent.toLowerCase()
-    if (stackLower.includes(sharedSignal) || raw.toLowerCase().split('\n').slice(5).some((line) => stackLower.includes(line.trim().toLowerCase()) && line.trim().length > 5)) {
-      return { name, command }
+function detectAppType(stackContent: string): string | null {
+  const lower = stackContent.toLowerCase()
+  const match = APP_TYPE_GROUPS.find((g) => g.tokens.some((t) => lower.includes(t)))
+  return match?.id ?? null
+}
+
+interface ScoredPreset {
+  preset: ToolkitPreset
+  score: number
+}
+
+export function scorePresets(stackContent: string, presets: ToolkitPreset[]): ScoredPreset[] {
+  const detectedRuntimes = detectRuntimes(stackContent)
+  const detectedAppType = detectAppType(stackContent)
+  const lower = stackContent.toLowerCase()
+
+  return presets
+    .map((preset) => {
+      let score = 0
+
+      if (preset.app_type && detectedAppType === preset.app_type) {
+        score += 4
+      }
+
+      for (const rt of preset.runtime) {
+        if (detectedRuntimes.includes(rt)) {
+          score += 2
+        }
+      }
+
+      for (const fw of preset.framework) {
+        if (lower.includes(fw.toLowerCase())) {
+          score += 2
+        }
+      }
+
+      return { preset, score }
+    })
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+}
+
+async function detectFromSharedStack(stackContent: string): Promise<{ name: string; command: string; id: string; score: number; preset: ToolkitPreset } | null> {
+  const presets = await readAllPresets()
+  if (presets.length === 0) return null
+
+  const scored = scorePresets(stackContent, presets)
+  if (scored.length === 0) return null
+
+  const bestScore = scored[0]!.score
+  const topMatches = scored.filter((s) => s.score === bestScore)
+
+  // Exactly one winner
+  if (topMatches.length === 1) {
+    const winner = topMatches[0]!.preset
+    return {
+      name: winner.starter_kit ?? winner.id,
+      command: winner.starter_kit_cmd ?? '',
+      id: winner.id,
+      score: bestScore,
+      preset: winner,
     }
   }
-  return null
+
+  // Multiple ties — return the first, caller handles interactive selection
+  return {
+    name: topMatches[0]!.preset.starter_kit ?? topMatches[0]!.preset.id,
+    command: topMatches[0]!.preset.starter_kit_cmd ?? '',
+    id: topMatches[0]!.preset.id,
+    score: bestScore,
+    preset: topMatches[0]!.preset,
+    // Signal that there were ties by attaching them as a property
+    ...(topMatches.length > 1 ? { _ties: topMatches } : {}),
+  } as { name: string; command: string; id: string; score: number; preset: ToolkitPreset; _ties?: ScoredPreset[] }
 }
 
 function detectFromBuiltins(stackContent: string): GeneratorEntry | null {
@@ -110,29 +192,64 @@ async function runStarterKit(
   stackContent: string,
   targetDir: string,
   noKit: boolean,
-): Promise<{ result: StarterKitResult | null; generatorRan: boolean }> {
+): Promise<{ result: StarterKitResult | null; generatorRan: boolean; toolkitMatch: ToolkitMatchInfo }> {
+  const noMatch: ToolkitMatchInfo = { id: null, score: 0, source: null }
+
   if (noKit) {
-    return { result: null, generatorRan: false }
+    return { result: null, generatorRan: false, toolkitMatch: noMatch }
   }
 
-  // Detection order: shared stack first, then built-ins
+  // Detection order: scored presets first, then built-ins
   const sharedMatch = await detectFromSharedStack(stackContent)
   let generatorName: string
   let generatorCommand: string
   let source: 'shared-stack' | 'builtin'
+  let toolkitMatch: ToolkitMatchInfo
+  let matchedPreset: ToolkitPreset | null = null
 
   if (sharedMatch) {
-    generatorName = sharedMatch.name
-    generatorCommand = sharedMatch.command
+    // Check for ties — need to let user choose
+    const allTies = (sharedMatch as { _ties?: ScoredPreset[] })['_ties']
+    let chosenMatch = sharedMatch
+
+    if (allTies && allTies.length > 1 && !isJsonMode()) {
+      printLine('\n◆ Multiple toolkit presets matched with equal score:')
+      const choiceResult = await select({
+        message: 'Choose a preset',
+        options: allTies.map((s) => ({
+          value: s.preset.id,
+          label: `${s.preset.id} — ${s.preset.title}${s.preset.starter_kit ? ` (${s.preset.starter_kit})` : ' (no starter kit)'}`,
+        })),
+      })
+      if (isCancel(choiceResult)) {
+        return { result: null, generatorRan: false, toolkitMatch: noMatch }
+      }
+      const chosen = allTies.find((s) => s.preset.id === (choiceResult as string))
+      if (chosen) {
+        chosenMatch = {
+          name: chosen.preset.starter_kit ?? chosen.preset.id,
+          command: chosen.preset.starter_kit_cmd ?? '',
+          id: chosen.preset.id,
+          score: chosen.score,
+          preset: chosen.preset,
+        }
+      }
+    }
+
+    generatorName = chosenMatch.name
+    generatorCommand = chosenMatch.command
     source = 'shared-stack'
+    matchedPreset = chosenMatch.preset
+    toolkitMatch = { id: chosenMatch.id, score: chosenMatch.score, source: 'preset' }
   } else {
     const builtinMatch = detectFromBuiltins(stackContent)
     if (!builtinMatch) {
-      return { result: null, generatorRan: false }
+      return { result: null, generatorRan: false, toolkitMatch: noMatch }
     }
     generatorName = builtinMatch.name
     generatorCommand = builtinMatch.command
     source = 'builtin'
+    toolkitMatch = { id: null, score: 0, source: 'builtin' }
   }
 
   // In JSON mode, skip interactive generator prompt
@@ -140,20 +257,68 @@ async function runStarterKit(
     return {
       result: { name: generatorName, command: generatorCommand, source, exit_code: null, skipped: true },
       generatorRan: false,
+      toolkitMatch,
     }
   }
 
-  // Prompt user
-  const stackSignal = generatorName.replace('create-', '').replace(/-app$/, '')
-  printLine(`\n◆ Detected ${stackSignal} in stack.md`)
-  printLine(`  Generator: ${generatorName}  (${generatorCommand})`)
+  // Preset match prompt: "Use preset X? [y/n]" (when single best match from presets)
+  if (source === 'shared-stack' && !(sharedMatch as { _ties?: ScoredPreset[] })['_ties']) {
+    printLine(`\n◆ Toolkit preset match: ${matchedPreset?.title ?? generatorName} (score: ${toolkitMatch.score})`)
+    if (generatorCommand) {
+      printLine(`  Starter kit: ${generatorName}  (${generatorCommand})`)
+    } else {
+      printLine(`  (no starter kit configured — overlay phase will still run)`)
+    }
+
+    if (generatorCommand) {
+      const use = await confirm({ message: `Use preset ${matchedPreset?.id ?? generatorName}?` })
+      if (isCancel(use) || !use) {
+        log.warn('Preset skipped — falling back to built-in detection.')
+        const builtinMatch = detectFromBuiltins(stackContent)
+        if (!builtinMatch) {
+          return { result: null, generatorRan: false, toolkitMatch: { id: null, score: 0, source: null } }
+        }
+        generatorName = builtinMatch.name
+        generatorCommand = builtinMatch.command
+        source = 'builtin'
+        toolkitMatch = { id: null, score: 0, source: 'builtin' }
+        matchedPreset = null
+      }
+    }
+  } else if (source === 'shared-stack') {
+    // Tie was resolved interactively above; just show what was chosen
+    if (generatorCommand) {
+      printLine(`\n◆ Using preset: ${generatorName}  (${generatorCommand})`)
+    } else {
+      printLine(`\n◆ Using preset: ${generatorName}  (no starter kit configured)`)
+    }
+  } else {
+    // Built-in match
+    const stackSignal = generatorName.replace('create-', '').replace(/-app$/, '')
+    printLine(`\n◆ Detected ${stackSignal} in stack.md`)
+    printLine(`  Generator: ${generatorName}  (${generatorCommand})`)
+  }
+
+  if (!generatorCommand) {
+    log.warn('No starter kit command — skipping to overlay phase.')
+    return {
+      result: { name: generatorName, command: '', source, exit_code: null, skipped: true },
+      generatorRan: false,
+      toolkitMatch,
+    }
+  }
 
   const shouldRun = await confirm({ message: 'Run it now?' })
   if (isCancel(shouldRun) || !shouldRun) {
     log.warn('Generator skipped — continuing to overlay phase.')
+    // Still write NEXT_STEPS.md if the preset has design_system/tools
+    if (matchedPreset && (matchedPreset.design_system || Object.keys(matchedPreset.tools).length > 0)) {
+      await writeNextSteps(targetDir, matchedPreset)
+    }
     return {
       result: { name: generatorName, command: generatorCommand, source, exit_code: null, skipped: true },
       generatorRan: false,
+      toolkitMatch,
     }
   }
 
@@ -177,10 +342,76 @@ async function runStarterKit(
     log.step('Generator complete')
   }
 
+  // Write NEXT_STEPS.md if preset has design_system or tools
+  if (matchedPreset && (matchedPreset.design_system || Object.keys(matchedPreset.tools).length > 0)) {
+    await writeNextSteps(targetDir, matchedPreset)
+  }
+
   return {
     result: { name: generatorName, command: generatorCommand, source, exit_code: exitCode },
     generatorRan: exitCode === 0,
+    toolkitMatch,
   }
+}
+
+// ---------------------------------------------------------------------------
+// NEXT_STEPS.md
+// ---------------------------------------------------------------------------
+
+async function writeNextSteps(targetDir: string, preset: ToolkitPreset): Promise<void> {
+  const nextStepsPath = path.join(targetDir, 'NEXT_STEPS.md')
+  const already = await fs.access(nextStepsPath).then(() => true).catch(() => false)
+  if (already) return
+
+  const lines: string[] = [
+    '# Next steps',
+    '',
+    'Complete these after your initial install:',
+    '',
+    '## Install',
+    '',
+    '```sh',
+    'pnpm install       # or npm install / cargo build',
+    '```',
+  ]
+
+  if (preset.design_system) {
+    lines.push('')
+    lines.push('## Design system')
+    lines.push('')
+    lines.push('```sh')
+    // Derive a best-effort install command from the design system name
+    const ds = preset.design_system.toLowerCase()
+    if (ds.includes('shadcn')) {
+      lines.push('npx shadcn@latest init')
+    } else {
+      lines.push(`# Set up ${preset.design_system}`)
+    }
+    lines.push('```')
+  }
+
+  const toolEntries = Object.entries(preset.tools).filter(([, v]) => v)
+  if (toolEntries.length > 0) {
+    lines.push('')
+    lines.push('## Tools')
+    lines.push('')
+    lines.push('| Role | Tool |')
+    lines.push('|---|---|')
+    const roleLabel: Record<string, string> = { formatter: 'Formatter', linter: 'Linter', test: 'Tests', e2e: 'E2E' }
+    for (const [role, tool] of toolEntries) {
+      lines.push(`| ${roleLabel[role] ?? role} | ${tool} |`)
+    }
+
+    // Playwright hint
+    if (preset.tools.e2e?.toLowerCase().includes('playwright')) {
+      lines.push('')
+      lines.push('Run `npx playwright install` to install browser binaries.')
+    }
+  }
+
+  lines.push('')
+  await fs.writeFile(nextStepsPath, lines.join('\n'), 'utf8')
+  log.step('NEXT_STEPS.md written')
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +647,7 @@ export async function runScaffold(targetDir: string, options: ScaffoldOptions): 
   const patternsApplied: string[] = []
   let starterKitResult: StarterKitResult | null = null
   let generatorRan = false
+  let toolkitMatch: ToolkitMatchInfo = { id: null, score: 0, source: null }
 
   // ── Phase 1 ──────────────────────────────────────────────────────────────
   if (!isJsonMode()) printLine('\nPhase 1 — Starter kit')
@@ -424,6 +656,7 @@ export async function runScaffold(targetDir: string, options: ScaffoldOptions): 
     const phase1 = await runStarterKit(stackContent, targetDir, options.noKit)
     starterKitResult = phase1.result
     generatorRan = phase1.generatorRan
+    toolkitMatch = phase1.toolkitMatch
 
     if (options.noKit && !isJsonMode()) {
       log.step('--no-kit: starter kit phase skipped')
@@ -562,6 +795,7 @@ export async function runScaffold(targetDir: string, options: ScaffoldOptions): 
     directories,
     patterns_applied: patternsApplied,
     git: gitResult,
+    toolkit_match: toolkitMatch,
   }
 
   return result
