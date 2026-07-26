@@ -26,12 +26,20 @@ export interface DecisionSummary {
   body: string;
 }
 
+export interface ShippedSpecSummary {
+  id: string;
+  title: string;
+  shipped: string;
+  release: string;
+}
+
 export interface BriefContext {
   projectName: string;
   lastActivityDate: string;
   currentDocs: CurrentDocSummary[];
   plannedSpecs: PlannedSpecSummary[];
   decisions: DecisionSummary[];
+  recentShipped: ShippedSpecSummary[];
   prdContent: string | null;
   stackContent: string | null;
 }
@@ -103,12 +111,19 @@ export function buildDeterministicBrief(ctx: BriefContext): string {
   }
 
   lines.push("", "WHERE YOU LEFT OFF");
+  if (ctx.recentShipped.length > 0) {
+    lines.push("  Recently shipped:");
+    for (const s of ctx.recentShipped) {
+      const rel = s.release ? ` (${s.release})` : "";
+      lines.push(`    ✓ ${s.id}${rel} — ${s.title} — ${s.shipped}`);
+    }
+  }
   const latest = latestUpdated(ctx.plannedSpecs);
-  if (!latest) {
-    lines.push("  No planned specs found.");
-  } else {
-    lines.push(`  Last touched: ${latest.id}, updated ${latest.updated}.`);
+  if (latest) {
+    lines.push(`  Last active spec: ${latest.id}, updated ${latest.updated}.`);
     lines.push(`  "${latest.title}"`);
+  } else if (ctx.recentShipped.length === 0) {
+    lines.push("  No planned specs or recent shipped work found.");
   }
 
   lines.push("", "DECISIONS TO REVISIT");
@@ -184,6 +199,14 @@ function buildAiMessages(ctx: BriefContext): Array<{ role: string; content: stri
     }
   }
   contextParts.push("");
+  if (ctx.recentShipped.length > 0) {
+    contextParts.push("## Recently Shipped (most recent first)");
+    for (const s of ctx.recentShipped) {
+      const rel = s.release ? ` in ${s.release}` : "";
+      contextParts.push(`- ${s.id}${rel} — ${s.title} (shipped ${s.shipped})`);
+    }
+    contextParts.push("");
+  }
   if (ctx.decisions.length > 0) {
     contextParts.push("## Decisions");
     for (const d of ctx.decisions) {
@@ -218,7 +241,7 @@ WHAT WAS PLANNED
 [List of planned specs sorted: building first, then ready, then draft. If none, say so explicitly.]
 
 WHERE YOU LEFT OFF
-[The most-recently-updated planned spec with a one-sentence summary]
+[Recent shipped work (if any), then the most-recently-updated planned spec with a one-sentence summary]
 
 DECISIONS TO REVISIT
 [List superseded decisions and any referencing potentially outdated libraries. If none, say so.]

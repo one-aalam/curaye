@@ -1565,6 +1565,14 @@ pub struct DecisionSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShippedSpecSummary {
+    pub id: String,
+    pub title: String,
+    pub shipped: String,
+    pub release: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BriefContext {
     pub project_name: String,
@@ -1572,6 +1580,7 @@ pub struct BriefContext {
     pub current_docs: Vec<CurrentDocSummary>,
     pub planned_specs: Vec<PlannedSpecSummary>,
     pub decisions: Vec<DecisionSummary>,
+    pub recent_shipped: Vec<ShippedSpecSummary>,
     pub prd_content: Option<String>,
     pub stack_content: Option<String>,
 }
@@ -1675,6 +1684,26 @@ pub async fn generate_brief_context(curaye_path: String) -> Result<BriefContext,
         }
     }).collect();
 
+    // shipped/ — most recent 5, sorted by shipped date descending
+    let mut shipped_raw = read_doc_files(&base.join("shipped")).await;
+    shipped_raw.sort_by(|a, b| {
+        let da = a.0.get("shipped").and_then(|v| v.as_str()).unwrap_or("");
+        let db = b.0.get("shipped").and_then(|v| v.as_str()).unwrap_or("");
+        db.cmp(da)
+    });
+    let recent_shipped: Vec<ShippedSpecSummary> = shipped_raw.iter().take(5).map(|(fm, _, _)| {
+        let shipped_date = fm.get("shipped").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if !shipped_date.is_empty() {
+            all_dates.push(shipped_date.clone());
+        }
+        ShippedSpecSummary {
+            id: fm.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            title: fm.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            shipped: shipped_date,
+            release: fm.get("release").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        }
+    }).collect();
+
     let last_activity_date = latest_date(&all_dates);
 
     Ok(BriefContext {
@@ -1683,6 +1712,7 @@ pub async fn generate_brief_context(curaye_path: String) -> Result<BriefContext,
         current_docs,
         planned_specs,
         decisions,
+        recent_shipped,
         prd_content,
         stack_content,
     })
