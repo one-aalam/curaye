@@ -2540,6 +2540,202 @@ pub async fn create_override_decision(
     Ok(file_path.to_string_lossy().to_string())
 }
 
+// ── Shared layer panel commands ───────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedDocSummary {
+    pub id: String,
+    pub category: String,
+    pub title: String,
+    pub adopted_by_count: usize,
+    pub promoted: Option<String>,
+}
+
+#[command]
+pub async fn list_shared_docs(category: Option<String>) -> Result<Vec<SharedDocSummary>, String> {
+    let shared_base = shared_base_path();
+    let all_cats: &[&str] = &["decisions", "patterns", "design", "agents", "stack"];
+    let categories: Vec<&str> = match category.as_deref() {
+        Some(c) => vec![c],
+        None => all_cats.to_vec(),
+    };
+
+    let mut summaries = Vec::new();
+
+    for cat in categories {
+        let cat_dir = shared_base.join(cat);
+        if !cat_dir.is_dir() {
+            continue;
+        }
+        let Ok(mut entries) = tokio::fs::read_dir(&cat_dir).await else {
+            continue;
+        };
+        let mut files: Vec<PathBuf> = Vec::new();
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                files.push(path);
+            }
+        }
+        files.sort();
+
+        for file_path in files {
+            let Ok(content) = tokio::fs::read_to_string(&file_path).await else {
+                continue;
+            };
+            let fm = parse_frontmatter_quick(&content);
+
+            let id = fm
+                .get("id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    file_path
+                        .file_stem()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_string()
+                });
+
+            let title = fm
+                .get("title")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| id.clone());
+
+            let adopted_by_count = fm
+                .get("adopted_by")
+                .and_then(|v| v.as_sequence())
+                .map(|s| s.len())
+                .unwrap_or(0);
+
+            let promoted = fm
+                .get("promoted")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            summaries.push(SharedDocSummary {
+                id,
+                category: cat.to_string(),
+                title,
+                adopted_by_count,
+                promoted,
+            });
+        }
+    }
+
+    Ok(summaries)
+}
+
+#[command]
+pub async fn read_shared_doc(category: String, doc_id: String) -> Result<String, String> {
+    let path = shared_base_path()
+        .join(&category)
+        .join(format!("{}.md", doc_id));
+    tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[command]
+pub async fn write_shared_doc(
+    category: String,
+    doc_id: String,
+    content: String,
+    source_project_id: Option<String>,
+) -> Result<usize, String> {
+    let path = shared_base_path()
+        .join(&category)
+        .join(format!("{}.md", doc_id));
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    write_atomic(&path, content.as_bytes()).await?;
+
+    let fm = parse_frontmatter_quick(&content);
+    let adopted_by: Vec<String> = fm
+        .get("adopted_by")
+        .and_then(|v| v.as_sequence())
+        .map(|seq| {
+            seq.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let projects_to_notify: Vec<String> = adopted_by
+        .into_iter()
+        .filter(|p| source_project_id.as_deref().map_or(true, |src| p != src))
+        .collect();
+
+    let count = projects_to_notify.len();
+    if !projects_to_notify.is_empty() {
+        let today = chrono_today();
+        update_shared_notification(&doc_id, &category, projects_to_notify, &today).await?;
+    }
+
+    Ok(count)
+}
+
+#[command]
+pub async fn create_shared_doc(category: String, doc_id: String) -> Result<String, String> {
+    let valid_categories = ["decisions", "patterns", "design", "agents", "stack"];
+    if !valid_categories.contains(&category.as_str()) {
+        return Err(format!("Invalid category '{}'", category));
+    }
+
+    let path = shared_base_path()
+        .join(&category)
+        .join(format!("{}.md", doc_id));
+
+    if path.exists() {
+        return Err(format!(
+            "Shared document '{}/{}' already exists",
+            category, doc_id
+        ));
+    }
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let today = chrono_today();
+    let content = format!(
+        "---\nid: {}\ntitle: \"\"\ncreated: {}\nadopted_by: []\n---\n\n",
+        doc_id, today
+    );
+
+    write_atomic(&path, content.as_bytes()).await?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[command]
+pub async fn get_notification_count(project_name: String) -> Result<usize, String> {
+    let nf_path = notifications_path();
+    if !nf_path.exists() {
+        return Ok(0);
+    }
+    let content = tokio::fs::read_to_string(&nf_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let nf: NotificationsFile = serde_yaml::from_str(&content).unwrap_or_default();
+    let count = nf
+        .notifications
+        .iter()
+        .filter(|n| n.adopted_by.contains(&project_name))
+        .count();
+    Ok(count)
+}
+
 // ── Atomic write ──────────────────────────────────────────────────────────────
 
 async fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {

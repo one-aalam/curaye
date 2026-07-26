@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, RefreshCw, Plus, LayoutList, Folder, FolderDot } from "lucide-react";
+import { FolderOpen, RefreshCw, Plus, LayoutList, Folder, FolderDot, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type RegistryProject } from "@/stores/projectStore";
 import { useTreeStore } from "@/stores/treeStore";
 import { useViewStore } from "@/stores/viewStore";
 import { MenuRoot, MenuContent, MenuItem, MenuSeparator } from "@/components/ui/menu";
 import { SettingsTrigger } from "@/components/SettingsDrawer";
+import { useSharedLayerStore } from "@/stores/sharedLayerStore";
 
 const STATUS_COLORS: Record<string, string> = {
   clean: "bg-green-500",
@@ -121,6 +122,7 @@ export function ProjectsSidebar() {
   const setView = useViewStore((s) => s.setView);
   const view = useViewStore((s) => s.view);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { openPanel, closePanel, sharedLayerOpen, notificationCount, refreshNotificationCount } = useSharedLayerStore();
 
   useEffect(() => {
     void loadProjects();
@@ -133,6 +135,12 @@ export function ProjectsSidebar() {
       if (intervalRef.current !== null) clearInterval(intervalRef.current);
     };
   }, [loadProjects, refreshSyncStatus]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      void refreshNotificationCount(selectedProjectId);
+    }
+  }, [selectedProjectId, refreshNotificationCount]);
 
   const handleAddProject = async () => {
     try {
@@ -189,6 +197,24 @@ export function ProjectsSidebar() {
         >
           <LayoutList size={12} />
           Backlog
+        </button>
+        <button
+          type="button"
+          onClick={() => sharedLayerOpen ? closePanel() : void openPanel()}
+          className={cn(
+            "flex items-center gap-2 rounded px-2.5 py-1.5 text-xs transition-colors",
+            sharedLayerOpen
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+              : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+          )}
+        >
+          <Layers size={12} />
+          <span className="flex-1 text-left">Shared</span>
+          {notificationCount > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/20 px-1 text-[9px] font-semibold text-primary">
+              {notificationCount}
+            </span>
+          )}
         </button>
         <div className="flex items-center gap-1">
           <button

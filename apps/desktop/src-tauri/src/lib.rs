@@ -3,14 +3,15 @@ mod commands;
 use tauri::Manager;
 use commands::{
     assign_spec_to_release, cancel_ai_stream, check_project_drift, create_document, create_override_decision,
-    create_release, generate_brief_context, get_ai_config, get_drift_findings, get_last_opened,
-    ignore_drift_finding, link_project, list_documents, mark_reviewed, parse_raw, pick_directory,
+    create_release, create_shared_doc, generate_brief_context, get_ai_config, get_drift_findings,
+    get_last_opened, get_notification_count, ignore_drift_finding, link_project, list_documents,
+    list_shared_docs, mark_reviewed, parse_raw, pick_directory,
     generalize_document, get_promoted_to_ref, promote_to_shared, read_document, read_registry,
-    reveal_in_finder, save_brief, scan_backlog, shared_doc_exists,
+    read_shared_doc, reveal_in_finder, save_brief, scan_backlog, shared_doc_exists,
     scan_project, scan_release_specs, scan_releases, search_index_status, search_keyword,
     search_semantic, serialize_document, set_last_opened, ship_release, start_ai_stream,
     sync_project, unlink_project, update_release_status, update_spec_status, write_ai_config,
-    write_document, write_registry, AiStreamState,
+    write_document, write_registry, write_shared_doc, AiStreamState,
 };
 
 pub fn run() {
@@ -60,6 +61,11 @@ pub fn run() {
             search_keyword,
             search_index_status,
             list_documents,
+            list_shared_docs,
+            read_shared_doc,
+            write_shared_doc,
+            create_shared_doc,
+            get_notification_count,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

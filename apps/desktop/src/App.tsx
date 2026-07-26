@@ -12,6 +12,7 @@ import { AIPalette } from "@/components/AIPalette";
 import { BacklogView } from "@/components/BacklogView";
 import { ReleaseView } from "@/components/ReleaseView";
 import { DriftPanel } from "@/components/DriftPanel";
+import { SharedLayerPanel } from "@/components/SharedLayerPanel";
 
 export function App() {
   const theme = useConfigStore((s) => s.theme);
@@ -75,6 +76,7 @@ export function App() {
       {view === "backlog" && <BacklogView />}
       {view === "releases" && <ReleaseView />}
       <DriftPanel />
+      <SharedLayerPanel />
     </div>
   );
 }

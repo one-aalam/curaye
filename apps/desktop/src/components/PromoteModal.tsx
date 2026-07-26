@@ -112,6 +112,7 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
         docId,
         projectId: projectName,
         updateSource,
+        // Use the edited textarea content (not the raw AI output) when a generalized version exists
         contentOverride: generalizedContent ?? null,
       });
       setResult(res);
@@ -257,21 +258,35 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
 
             {/* AI generalization */}
             {aiAvailable && (
-              <div>
-                {generalizedContent ? (
-                  <div className="flex items-center justify-between rounded-md border border-green-500/20 bg-green-500/8 px-3 py-2">
-                    <div className="flex items-center gap-1.5">
-                      <Sparkles size={10} className="text-green-400 flex-shrink-0" />
-                      <span className="text-xs text-green-400">Using generalized version</span>
+              <div className="space-y-2">
+                {generalizedContent !== null ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles size={10} className="text-green-400 flex-shrink-0" />
+                        <span className="text-xs text-green-400">Generalized version (editable)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setGeneralizedContent(null); setGeneralizeError(null); }}
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <RotateCcw size={9} />
+                        Reset
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => { setGeneralizedContent(null); setGeneralizeError(null); }}
-                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <RotateCcw size={9} />
-                      Reset
-                    </button>
+                    <textarea
+                      value={generalizedContent}
+                      onChange={(e) => setGeneralizedContent(e.target.value)}
+                      rows={6}
+                      className={cn(
+                        "w-full rounded-md border border-border/50 bg-card/50 px-3 py-2",
+                        "font-mono text-[10px] text-foreground leading-relaxed resize-y",
+                        "focus:outline-none focus:ring-1 focus:border-primary/40 focus:ring-primary/20",
+                        "overflow-y-auto",
+                      )}
+                      spellCheck={false}
+                    />
                   </div>
                 ) : (
                   <button
@@ -289,7 +304,7 @@ export function PromoteModal({ filePath, section, projectName, onClose }: Promot
                   </button>
                 )}
                 {generalizeError && (
-                  <p className="mt-1.5 rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-xs text-destructive">
+                  <p className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-xs text-destructive">
                     {generalizeError}
                   </p>
                 )}
