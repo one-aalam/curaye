@@ -7,10 +7,15 @@ import {
   ExternalLink,
   Archive,
   ChevronDown,
+  Clipboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBacklogStore, type BacklogSpec, type SortField } from "@/stores/backlogStore";
 import { useViewStore } from "@/stores/viewStore";
+
+async function copyBuildCommand(specId: string) {
+  await navigator.clipboard.writeText(`/curaye-build ${specId}`);
+}
 
 // ── Scoring helpers ───────────────────────────────────────────────────────────
 
@@ -122,6 +127,12 @@ function SpecCard({ spec }: { spec: BacklogSpec }) {
   const shelveSpec = useBacklogStore((s) => s.shelveSpec);
   const openSpec = useBacklogStore((s) => s.openSpec);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
+  }
 
   return (
     <div
@@ -130,6 +141,11 @@ function SpecCard({ spec }: { spec: BacklogSpec }) {
         "hover:bg-card/90 transition-colors cursor-default",
       )}
     >
+      {toast && (
+        <div className="absolute -top-6 right-0 z-50 rounded bg-card/90 border border-(--glass-border) px-2 py-0.5 text-[10px] text-foreground backdrop-blur-md whitespace-nowrap shadow">
+          {toast}
+        </div>
+      )}
       <div className="flex items-start gap-1.5 min-w-0">
         <StatusChip status={spec.status} specPath={spec.path} />
         <div className="flex-1 min-w-0">
@@ -154,7 +170,7 @@ function SpecCard({ spec }: { spec: BacklogSpec }) {
               />
               <div
                 className={cn(
-                  "absolute right-0 top-full mt-1 z-50 min-w-36 rounded-md",
+                  "absolute right-0 top-full mt-1 z-50 min-w-44 rounded-md",
                   "border border-(--glass-border) bg-card/90 backdrop-blur-md shadow-lg text-xs py-1",
                 )}
               >
@@ -169,6 +185,23 @@ function SpecCard({ spec }: { spec: BacklogSpec }) {
                   <ExternalLink size={11} />
                   Open spec
                 </button>
+                {spec.id && (
+                  <>
+                    <div className="my-1 border-t border-(--glass-border)" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        void copyBuildCommand(spec.id!).then(() => showToast("Copied to clipboard"));
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent text-foreground"
+                    >
+                      <Clipboard size={11} />
+                      Copy build command
+                    </button>
+                  </>
+                )}
+                <div className="my-1 border-t border-(--glass-border)" />
                 <button
                   type="button"
                   onClick={() => {
@@ -349,9 +382,20 @@ function ListRow({ spec }: { spec: BacklogSpec }) {
   const shelveSpec = useBacklogStore((s) => s.shelveSpec);
   const openSpec = useBacklogStore((s) => s.openSpec);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
+  }
 
   return (
     <div className="group relative flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent/30 transition-colors text-[11px]">
+      {toast && (
+        <div className="absolute right-8 top-1/2 -translate-y-1/2 z-50 rounded bg-card/90 border border-(--glass-border) px-2 py-0.5 text-[10px] text-foreground backdrop-blur-md whitespace-nowrap shadow">
+          {toast}
+        </div>
+      )}
       <span className="w-24 truncate text-muted-foreground/60 flex-shrink-0">
         {spec.project_name}
       </span>
@@ -382,7 +426,7 @@ function ListRow({ spec }: { spec: BacklogSpec }) {
             <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
             <div
               className={cn(
-                "absolute right-0 top-full mt-1 z-50 min-w-36 rounded-md",
+                "absolute right-0 top-full mt-1 z-50 min-w-44 rounded-md",
                 "border border-(--glass-border) bg-card/90 backdrop-blur-md shadow-lg text-xs py-1",
               )}
             >
@@ -397,6 +441,23 @@ function ListRow({ spec }: { spec: BacklogSpec }) {
                 <ExternalLink size={11} />
                 Open spec
               </button>
+              {spec.id && (
+                <>
+                  <div className="my-1 border-t border-(--glass-border)" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      void copyBuildCommand(spec.id!).then(() => showToast("Copied to clipboard"));
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent text-foreground"
+                  >
+                    <Clipboard size={11} />
+                    Copy build command
+                  </button>
+                </>
+              )}
+              <div className="my-1 border-t border-(--glass-border)" />
               <button
                 type="button"
                 onClick={() => {
