@@ -1,10 +1,9 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { fetchAiConfig, streamCompletion, type AiProviderConfig, type AiMessage } from "@/lib/aiClient";
+import { fetchAiConfig, fetchEmbedding, streamCompletion, type AiProviderConfig, type AiMessage } from "@/lib/aiClient";
 import { useProjectStore } from "@/stores/projectStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { useTreeStore } from "@/stores/treeStore";
-import { useSearchStore, type SearchHit } from "@/stores/searchStore";
 
 export type PalettePhase = "input" | "streaming" | "diff";
 
@@ -25,6 +24,154 @@ export interface ResolvedAction {
 export interface DiffLine {
   kind: "same" | "added" | "removed";
   text: string;
+}
+
+export interface RagContext {
+  hits: Array<{ title: string; type: string; filePath: string; body: string }>;
+  prdContent: string | null;
+  stackContent: string | null;
+  truncated: boolean;
+}
+
+// Which doc sections to search per command
+const RAG_DOC_TYPES: Partial<Record<ActionType, string[]>> = {
+  "semantic-search": ["planned", "current", "shipped", "decisions"],
+  "draft-spec": ["planned", "shipped"],
+  "generate-ac": ["shipped", "planned"],
+};
+
+const RAG_CHAR_BUDGET = 12000;
+const PRD_CHAR_BUDGET = 800;
+const STACK_CHAR_BUDGET = 600;
+
+function trimAtSentenceBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const sub = text.slice(0, maxChars);
+  const last = Math.max(sub.lastIndexOf("."), sub.lastIndexOf("!"), sub.lastIndexOf("?"));
+  return last > 0 ? sub.slice(0, last + 1) : sub;
+}
+
+async function gatherRagContext(
+  query: string,
+  curayePath: string,
+  projectName: string | null,
+  docTypes: string[],
+  charBudget: number,
+  aiConfig: AiProviderConfig | null,
+  signal: AbortSignal,
+): Promise<RagContext> {
+  const prdBudget = PRD_CHAR_BUDGET;
+  const stackBudget = STACK_CHAR_BUDGET;
+  const hitBudget = charBudget - prdBudget - stackBudget;
+
+  // Load prd.md and stack.md via generate_brief_context
+  let prdContent: string | null = null;
+  let stackContent: string | null = null;
+  try {
+    const brief = await invoke<{ prdContent: string | null; stackContent: string | null }>(
+      "generate_brief_context",
+      { curayePath },
+    );
+    prdContent = brief.prdContent ? trimAtSentenceBoundary(brief.prdContent, prdBudget) : null;
+    stackContent = brief.stackContent ? trimAtSentenceBoundary(brief.stackContent, stackBudget) : null;
+  } catch {
+    // files don't exist or command unavailable
+  }
+
+  if (signal.aborted) return { hits: [], prdContent, stackContent, truncated: false };
+
+  // Determine whether embedding is available (Anthropic without explicit embedProvider falls back to keyword)
+  const canEmbed =
+    aiConfig !== null &&
+    (aiConfig.embedProvider !== undefined ||
+      aiConfig.kind === "ollama" ||
+      aiConfig.kind === "openai");
+
+  // Tauri SearchResult serialises doc_type as "type"
+  interface TauriHit {
+    projectId: string;
+    type: string;
+    title: string;
+    filePath: string;
+    snippet: string;
+    score: number;
+  }
+
+  let rawHits: TauriHit[] = [];
+  try {
+    if (canEmbed && aiConfig !== null) {
+      let indexExists = false;
+      try {
+        const status = await invoke<{ exists: boolean }>("search_index_status");
+        indexExists = status.exists;
+      } catch {
+        // ignore — treat as no index
+      }
+
+      if (indexExists && !signal.aborted) {
+        try {
+          const vector = await fetchEmbedding(aiConfig, query);
+          if (!signal.aborted) {
+            rawHits = await invoke<TauriHit[]>("search_semantic", {
+              queryVector: vector,
+              projectId: projectName ?? null,
+              docType: null,
+              limit: 20,
+            });
+          }
+        } catch {
+          // Embedding failed — fall back to keyword silently
+          if (!signal.aborted) {
+            rawHits = await invoke<TauriHit[]>("search_keyword", {
+              query,
+              curayePaths: [curayePath],
+              docType: null,
+            });
+          }
+        }
+      } else if (!signal.aborted) {
+        rawHits = await invoke<TauriHit[]>("search_keyword", {
+          query,
+          curayePaths: [curayePath],
+          docType: null,
+        });
+      }
+    } else if (!signal.aborted) {
+      rawHits = await invoke<TauriHit[]>("search_keyword", {
+        query,
+        curayePaths: [curayePath],
+        docType: null,
+      });
+    }
+  } catch {
+    rawHits = [];
+  }
+
+  if (signal.aborted) return { hits: [], prdContent, stackContent, truncated: false };
+
+  // Filter by the relevant doc types for this command and take top hits
+  const filtered = rawHits.filter((h) => docTypes.includes(h.type));
+  const topHits = filtered.slice(0, 10);
+  const truncated = filtered.length > topHits.length;
+  const perHitBudget = topHits.length > 0 ? Math.floor(hitBudget / topHits.length) : hitBudget;
+
+  // Read full document bodies subject to per-hit budget
+  const hits: RagContext["hits"] = [];
+  for (const hit of topHits) {
+    if (signal.aborted) break;
+    try {
+      const doc = await invoke<{ body: string }>("read_document", {
+        path: hit.filePath,
+        docType: hit.type,
+      });
+      const body = trimAtSentenceBoundary(doc.body, perHitBudget);
+      hits.push({ title: hit.title, type: hit.type, filePath: hit.filePath, body });
+    } catch {
+      // Skip documents that can't be read
+    }
+  }
+
+  return { hits, prdContent, stackContent, truncated };
 }
 
 function resolveAction(query: string): ResolvedAction {
@@ -76,6 +223,27 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function appendRagToSystem(sysLines: string[], ragContext: RagContext | null): void {
+  if (!ragContext) return;
+
+  if (ragContext.prdContent || ragContext.stackContent) {
+    sysLines.push("\n## Project context");
+    if (ragContext.prdContent) {
+      sysLines.push("### prd.md\n" + ragContext.prdContent);
+    }
+    if (ragContext.stackContent) {
+      sysLines.push("### stack.md\n" + ragContext.stackContent);
+    }
+  }
+
+  if (ragContext.hits.length > 0) {
+    sysLines.push("\n## Relevant existing documents");
+    for (const hit of ragContext.hits) {
+      sysLines.push(`### ${hit.title} (${hit.type})\n${hit.body}`);
+    }
+  }
+}
+
 function buildMessages(action: ResolvedAction, context: PaletteContext): AiMessage[] {
   const msgs: AiMessage[] = [];
 
@@ -89,12 +257,14 @@ function buildMessages(action: ResolvedAction, context: PaletteContext): AiMessa
   if (context.projectName) {
     sysLines.push(`The current project is: "${context.projectName}".`);
   }
-  msgs.push({ role: "system", content: sysLines.join("\n") });
 
   const today = todayIso();
 
   switch (action.type) {
     case "draft-spec": {
+      appendRagToSystem(sysLines, context.ragContext);
+      msgs.push({ role: "system", content: sysLines.join("\n") });
+
       const title = action.param ?? "Untitled Feature";
       const id = slugify(title);
       msgs.push({
@@ -130,6 +300,7 @@ Fill in every body section now with specific, practical content for "${title}".`
     }
 
     case "reentry-brief": {
+      msgs.push({ role: "system", content: sysLines.join("\n") });
       msgs.push({
         role: "user",
         content: `Provide a concise re-entry brief for the ${context.projectName ?? "current"} project. Summarise: what was last being worked on, what the immediate next step should be, and any known blockers or open questions. Keep it under 200 words.`,
@@ -138,6 +309,7 @@ Fill in every body section now with specific, practical content for "${title}".`
     }
 
     case "update-current": {
+      msgs.push({ role: "system", content: sysLines.join("\n") });
       if (context.openDocContent) {
         msgs.push({
           role: "user",
@@ -150,19 +322,17 @@ Fill in every body section now with specific, practical content for "${title}".`
     }
 
     case "semantic-search": {
-      const hitSummary = context.searchHits.length > 0
-        ? context.searchHits
-            .map((h) => `- **${h.title}** (${h.type})${h.snippet ? `: ${h.snippet}` : ""}`)
-            .join("\n")
-        : "No matching documents found.";
+      appendRagToSystem(sysLines, context.ragContext);
+      msgs.push({ role: "system", content: sysLines.join("\n") });
       msgs.push({
         role: "user",
-        content: `I want to find where I previously solved: "${action.param ?? ""}"\n\nSearch results from my project docs:\n${hitSummary}\n\nWhich documents are most relevant and what solution or approach do they describe? If the results don't match, say so clearly.`,
+        content: `I want to find where I previously solved: "${action.param ?? ""}"\n\nBased on the project documents in the system context, which documents are most relevant and what solution or approach do they describe? Cite specific document titles and summarise what each contains. If no documents match, say so clearly.`,
       });
       break;
     }
 
     case "drift-detection": {
+      msgs.push({ role: "system", content: sysLines.join("\n") });
       msgs.push({
         role: "user",
         content: `Analyse potential drift for the ${context.projectName ?? "current"} project. Consider: Are shipped specs reflected in current/ docs? Are there any obvious gaps between what was planned and what current/ documents describe? Return a brief analysis with specific action items.`,
@@ -171,6 +341,8 @@ Fill in every body section now with specific, practical content for "${title}".`
     }
 
     case "generate-ac": {
+      appendRagToSystem(sysLines, context.ragContext);
+      msgs.push({ role: "system", content: sysLines.join("\n") });
       if (action.param) {
         msgs.push({
           role: "user",
@@ -191,6 +363,7 @@ Fill in every body section now with specific, practical content for "${title}".`
     }
 
     default: {
+      msgs.push({ role: "system", content: sysLines.join("\n") });
       msgs.push({
         role: "user",
         content: action.param ?? "Hello",
@@ -208,7 +381,7 @@ export interface PaletteContext {
   openDocId: string | null;
   openDocPath: string | null;
   openDocContent: string | null;
-  searchHits: SearchHit[];
+  ragContext: RagContext | null;
 }
 
 function gatherContext(): PaletteContext {
@@ -229,7 +402,7 @@ function gatherContext(): PaletteContext {
     openDocId,
     openDocPath: editorState.currentPath,
     openDocContent: editorState.document?.raw ?? null,
-    searchHits: [],
+    ragContext: null,
   };
 }
 
@@ -394,16 +567,29 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
       return;
     }
 
+    // Create abort controller early — covers both RAG gathering and streaming (criterion 11)
     const controller = new AbortController();
     set({ _abortController: controller });
 
-    // For semantic search: run search silently first to gather context for the AI
-    let searchHits: SearchHit[] = [];
-    if (action.type === "semantic-search" && action.param) {
-      await useSearchStore.getState().runSearch(action.param);
-      searchHits = useSearchStore.getState().hits.slice(0, 8);
-      // Clear sidebar search state — results go into the palette, not the sidebar
-      useSearchStore.getState().clearSearch();
+    // RAG pre-flight: gather context before calling the AI for the three enriched commands
+    const ragDocTypes = RAG_DOC_TYPES[action.type];
+    if (ragDocTypes && context.curayePath) {
+      const ragQuery =
+        action.type === "semantic-search" ? (action.param ?? query) : query;
+      try {
+        context.ragContext = await gatherRagContext(
+          ragQuery,
+          context.curayePath,
+          context.projectName,
+          ragDocTypes,
+          RAG_CHAR_BUDGET,
+          aiConfig,
+          controller.signal,
+        );
+      } catch {
+        // RAG failure is non-fatal — proceed without context
+      }
+      if (controller.signal.aborted) return;
     }
 
     // For update-current, grab the original text now
@@ -423,7 +609,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
     }
     set({ targetPath });
 
-    const messages = buildMessages(action, { ...context, searchHits });
+    const messages = buildMessages(action, context);
 
     try {
       for await (const token of streamCompletion(aiConfig, messages, controller.signal)) {
