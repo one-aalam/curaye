@@ -63,27 +63,37 @@ function ThemeSection() {
         UI Font
       </h3>
       <div className="flex items-center gap-2">
-        {UI_FONTS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setUiFont(f.id)}
-            className={cn(
-              "flex flex-col items-center gap-1 rounded-lg px-3 py-2 transition-colors border w-16 text-balance",
-              uiFont === f.id
-                ? "bg-primary/10 border-primary/40 text-primary"
-                : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
-            )}
-          >
-            <span
-              className="text-base leading-none"
-              style={{ fontFamily: FONT_FAMILY[f.id] }}
+        {UI_FONTS.map((f) => {
+          const active = uiFont === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setUiFont(f.id)}
+              className={cn(
+                "relative flex flex-col items-center gap-1 rounded-lg px-3 py-2 transition-all border w-16",
+                active
+                  ? "bg-primary/10 border-primary/50 text-primary ring-1 ring-primary/30"
+                  : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
+              )}
             >
-              {f.sample}
-            </span>
-            <span className="text-[9px] whitespace-nowrap">{f.label}</span>
-          </button>
-        ))}
+              {active && (
+                <Check
+                  size={8}
+                  className="absolute top-1 right-1 text-primary"
+                  strokeWidth={3}
+                />
+              )}
+              <span
+                className="text-base leading-none"
+                style={{ fontFamily: FONT_FAMILY[f.id] }}
+              >
+                {f.sample}
+              </span>
+              <span className="text-[9px] whitespace-nowrap">{f.label}</span>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -171,9 +181,17 @@ function MaskedInput({
   );
 }
 
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  ollama: "Ollama",
+  openai: "OpenAI",
+  "": "None",
+};
+
 function AiSection() {
   const refreshAiConfig = usePaletteStore((s) => s.refreshAiConfig);
 
+  const [loading, setLoading] = useState(true);
   const [provider, setProvider] = useState<ProviderKind>("");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
@@ -195,7 +213,8 @@ function AiSection() {
             (cfg.kind === "ollama" ? DEFAULT_OLLAMA_URL : cfg.kind === "openai" ? DEFAULT_OPENAI_URL : ""),
         );
       })
-      .catch(() => setLoadError("Could not read current config."));
+      .catch(() => setLoadError("Could not read current config."))
+      .finally(() => setLoading(false));
   }, []);
 
   const handleProviderChange = (kind: ProviderKind) => {
@@ -246,23 +265,39 @@ function AiSection() {
       {/* Provider selector */}
       <div className="mb-4">
         <FieldLabel>Provider</FieldLabel>
-        <div className="flex gap-1.5 flex-wrap">
-          {(["anthropic", "ollama", "openai", ""] as ProviderKind[]).map((k) => (
-            <button
-              key={k || "none"}
-              type="button"
-              onClick={() => handleProviderChange(k)}
-              className={cn(
-                "rounded px-2.5 py-1 text-[11px] border transition-colors",
-                provider === k
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
-              )}
-            >
-              {k || "None"}
-            </button>
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex gap-1.5">
+            {[80, 64, 56, 44].map((w) => (
+              <div
+                key={w}
+                className="h-[26px] rounded animate-pulse bg-muted/40 border border-border/30"
+                style={{ width: w }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex gap-1.5 flex-wrap">
+            {(["anthropic", "ollama", "openai", ""] as ProviderKind[]).map((k) => {
+              const active = provider === k;
+              return (
+                <button
+                  key={k || "none"}
+                  type="button"
+                  onClick={() => handleProviderChange(k)}
+                  className={cn(
+                    "relative flex items-center gap-1 rounded px-2.5 py-1 text-[11px] border transition-all",
+                    active
+                      ? "border-primary/50 bg-primary/10 text-primary ring-1 ring-primary/30"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border",
+                  )}
+                >
+                  {active && <Check size={9} strokeWidth={3} />}
+                  {PROVIDER_LABELS[k]}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {provider !== "" && (
