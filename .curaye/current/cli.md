@@ -2,7 +2,7 @@
 id: cli
 title: CLI — Command Surface
 domain: cli
-updated: 2026-07-27
+updated: 2026-11-01
 ---
 
 # CLI — Command Surface
@@ -133,15 +133,17 @@ The toolkit scoring algorithm (`scorePresets`) is exported from `apps/cli/src/co
 
 ## Skill distribution
 
-`@curaye/cli` bundles all six Curaye Claude Code skills in a `skills/` directory alongside `dist/`. A single command copies them to `~/.claude/commands/`, making `/curaye-build`, `/curaye-ship`, `/curaye-brief`, `/curaye-bootstrap`, `/curaye-import`, and `/curaye-check` available as slash commands in every Claude Code session on the machine.
+`@curaye/cli` bundles all eight Curaye Claude Code skills in a `skills/` directory alongside `dist/`. A single command copies them to `~/.claude/commands/`, making `/curaye-build`, `/curaye-ship`, `/curaye-brief`, `/curaye-bootstrap`, `/curaye-import`, `/curaye-check`, `/curaye-spec`, and `/curaye-capture` available as slash commands in every Claude Code session on the machine.
 
 | Command | Description |
 |---|---|
-| `curaye skill install [--path <dir>]` | Copies all 6 bundled skill files to `~/.claude/commands/` (or custom `--path`). Skips files that already exist. Prints an install summary on success; prints "Already installed. Use --update to upgrade." when all files are already present. |
+| `curaye skill install [--path <dir>]` | Copies all 8 bundled skill files to `~/.claude/commands/` (or custom `--path`). Skips files that already exist. Prints an install summary on success; prints "Already installed. Use --update to upgrade." when all files are already present. |
 | `curaye skill install --update [--path <dir>]` | Same as above but overwrites existing skill files with the current CLI version's copies. |
 | `curaye skill install --list [--path <dir>]` | Shows each skill's installed version vs the version bundled with the current CLI, with a `✓` or `← update available` status column. |
 
-Each skill file begins with `<!-- curaye-skill: vX.Y.Z -->` matching the CLI package version. The `--list` command reads this header to compare versions. The `skills/` directory is included in the npm package via the `files` field in `package.json`.
+Each skill file begins with `<!-- curaye-skill: vX.Y.Z -->` matching the CLI package version (currently `0.0.2`). The `--list` command reads this header to compare versions and flags existing installs as out of date when the bundled version is newer. The `skills/` directory is included in the npm package via the `files` field in `package.json`.
+
+**Skills included (v0.0.2):** `curaye-brief`, `curaye-build`, `curaye-ship`, `curaye-bootstrap`, `curaye-import`, `curaye-check`, `curaye-spec`, `curaye-capture`. The last two were added in v0.0.2; the first six were updated to understand `requires`/`dependencies` fallback, revision `pins`, `## Log` sections, `inbox/` seeds, `shelved` specs, and stable criteria numbering.
 
 ## Binary distribution
 
