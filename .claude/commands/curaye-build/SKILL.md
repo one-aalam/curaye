@@ -3,7 +3,7 @@ name: curaye-build
 description: Implement a Curaye protocol spec to its acceptance criteria. Use when you want to build a planned feature in a Curaye-managed project. Reads the spec, marks it building, implements it, and verifies every acceptance criterion before reporting. Pass a spec id as an argument, or omit to be shown the list of available specs.
 compatibility: Designed for Claude Code. Requires a Curaye-managed project with a .curaye/planned/ folder.
 metadata:
-  version: "0.1"
+  version: "0.2"
 ---
 
 You are about to implement a feature defined by a Curaye protocol spec. Follow every step in order without skipping.
@@ -12,9 +12,9 @@ You are about to implement a feature defined by a Curaye protocol spec. Follow e
 
 The user may have passed a spec id as an argument: $ARGUMENTS
 
-**If an id was provided:** look for a file matching that id in `.curaye/planned/` (e.g. `planned/06-cli.md` for id `cli`). Read it.
+**If an id was provided:** look for a file matching that id in `.curaye/planned/` — by frontmatter `id` first, then by filename without its numeric prefix (e.g. `planned/06-cli.md` for id `cli`). Read it. If its status is `shelved`, stop and ask whether to unshelve it before building.
 
-**If no id was provided:** scan `.curaye/planned/` for all files with `status: ready` or `status: building`. List them in this format and ask the user which to work on:
+**If no id was provided:** scan `.curaye/planned/` for all files with `status: ready` or `status: building`. List them in this format, adding a short marker after the effort when a spec has stale dependencies or unfolded notes (e.g. `· behind sync`, `· 3 unfolded`), and ask the user which to work on:
 
 ```
 Available specs:
@@ -35,9 +35,32 @@ Read the full spec file. Extract and confirm you understand:
 - **Goal** — the outcome, not the solution
 - **Non-goals** — what is explicitly out of scope; do not implement these
 - **All feature-specific sections** — data structures, APIs, UI behaviour, etc.
-- **Acceptance criteria** — the numbered list at the end; these are the definition of done
+- **Acceptance criteria** — the numbered list near the end; these are the definition of done. Skip any criterion marked `*(removed in rev N …)*` — it is kept only so numbering stays stable. Refer to the remaining criteria by their existing numbers; never renumber them.
+- **Log** — the `## Log` section at the very end, if present. It is context, not contract: resources to consult, discoveries to keep in mind, inspirations for the approach. Where the log and the acceptance criteria disagree, the acceptance criteria win.
 
-Summarise what you are about to build in 3–5 sentences and state the acceptance criteria count. Wait for the user to confirm before touching any code.
+### Readiness checks
+
+Before summarising, check the spec against its surroundings. Read its `requires` list of spec ids; if it is missing or empty but the spec has `dependencies` (older Curaye projects), use that. Read its `pins` map if present (`pins: {sync: 3}`).
+
+1. **Unmet dependencies** — for each required id, find it in `.curaye/shipped/` or `.curaye/planned/`. If it is planned and not `building` or `done`, warn: "This spec requires <id>, which hasn't been built yet." If it is `shelved`, warn more strongly: "This spec requires <id>, which is shelved."
+2. **Stale dependencies** — if `pins[id]` is lower than the upstream spec's current `revision` (missing counts as 1), the contract upstream changed since this spec was last reviewed against it. Ids with no pin are not checked.
+3. **Unfolded notes** — count log entries ending in `→ unfolded`, and call out any of type `upstream` or `question` specifically.
+
+If any check fires, present it before the summary:
+
+```
+Before building api-client:
+  ⚠ requires sync — pinned @3, now @4 (chunked payloads changed AC2)
+  ⚠ 1 unfolded upstream note, 1 open question
+  · 2 unfolded resources (will be used as context)
+
+  1. Fold first — stop here; run /curaye-spec api-client, then build
+  2. Build anyway — I'll treat the current acceptance criteria as final
+```
+
+Shelved dependencies, stale dependencies, upstream notes and open questions default to option 1; plain resources and inspirations never block. Wait for the user's choice. If they choose to build anyway, note it in the Step 7 report.
+
+Summarise what you are about to build in 3–5 sentences and state the acceptance criteria count (excluding removed ones). Wait for the user to confirm before touching any code.
 
 ## Step 3 — Mark as building
 
@@ -79,5 +102,8 @@ When all criteria are satisfied, report:
 - Which files were created or modified
 - Any criteria that required interpretation or judgment calls
 - Anything that should be addressed in a follow-up spec
+- If readiness warnings were overridden in Step 2, say which
+
+Offer to record discoveries made during the build: "Capture these as log notes? I can run `/curaye-capture`." Do not edit the spec's contract yourself; changes to it go through `/curaye-spec`.
 
 Do NOT run `/curaye-ship` automatically. Shipping is a separate, explicit decision. Tell the user: "Ready to ship. Run `/curaye-ship $SPEC_ID` when you are satisfied."

@@ -14,6 +14,8 @@ type SkillName =
   | 'curaye-bootstrap'
   | 'curaye-import'
   | 'curaye-check'
+  | 'curaye-spec'
+  | 'curaye-capture'
 
 const SKILL_NAMES: readonly SkillName[] = [
   'curaye-build',
@@ -22,6 +24,8 @@ const SKILL_NAMES: readonly SkillName[] = [
   'curaye-bootstrap',
   'curaye-import',
   'curaye-check',
+  'curaye-spec',
+  'curaye-capture',
 ]
 
 function describeSkill(name: SkillName): string {
@@ -38,6 +42,10 @@ function describeSkill(name: SkillName): string {
       return 'Import an existing project'
     case 'curaye-check':
       return 'Detect and resolve shared layer drift'
+    case 'curaye-spec':
+      return 'Create and evolve specs from a session'
+    case 'curaye-capture':
+      return 'Capture a note into a spec log or inbox'
   }
 }
 

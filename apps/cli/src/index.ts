@@ -32,7 +32,7 @@ const program = new Command()
 program
   .name('curaye')
   .description('Local-first spec and knowledge management for developers')
-  .version('0.0.1')
+  .version('0.0.2')
   .option('--json', 'Output structured JSON')
   .hook('preAction', () => {
     const opts = program.opts<{ json?: boolean }>()

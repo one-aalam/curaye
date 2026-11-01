@@ -1,10 +1,10 @@
-<!-- curaye-skill: v0.0.1 -->
+<!-- curaye-skill: v0.0.2 -->
 ---
 name: curaye-ship
 description: Graduate a completed Curaye spec from planned/ to shipped/, update the current/ layer, and optionally sync stack.md and CLAUDE.md. Use after /curaye-build when the implementation is done. The CLI handles mechanical file operations; this skill writes the current/ update with LLM comprehension, then proposes targeted edits to stack.md and CLAUDE.md when what shipped affects the tech stack or agent conventions. Pass the spec id as an argument.
 compatibility: Designed for Claude Code. Requires a Curaye-managed project and the curaye CLI installed.
 metadata:
-  version: "0.1"
+  version: "0.2"
 ---
 
 You are graduating a completed spec through the Curaye protocol ship flow. The CLI handles all mechanical file operations. Your job is the intelligent part: writing the `current/` update that reflects what now exists.
@@ -19,9 +19,16 @@ Read the full planned spec from `.curaye/planned/`. Confirm you understand:
 - The spec id, title, and tags
 - What was built (from the goal and feature sections)
 - Which domains are affected (use `tags` and the non-goals as guides)
-- The acceptance criteria — these define what actually shipped
+- The acceptance criteria — these define what actually shipped. Ignore any marked `*(removed in rev N …)*`.
 
 If `status` is `draft` or `ready`, stop: "This spec has not been built. Run `/curaye-build $SPEC_ID` first."
+
+**Save what the CLI is about to delete.** `curaye ship` removes the planned file in Step 2, so collect these now and keep them for later steps:
+- The spec's `revision` (missing counts as 1)
+- From its `## Log` section (if any):
+  - every `resource` entry (summary and URL), folded or not
+  - every entry still ending in `→ unfolded`, of any type
+- Its **dependents**: every other file in `.curaye/planned/` whose `requires` list includes this spec's id. If a spec's `requires` is missing or empty but it has `dependencies` (older Curaye projects), read that instead. For each dependent, note its pin on this spec from its `pins` map (e.g. `pins: {sync: 3}`), or that it has none. Skip dependents with `status: shelved`.
 
 ## Step 2 — Call the CLI for mechanical graduation
 
@@ -59,6 +66,10 @@ The CLI creates the `shipped/` document with frontmatter only. Open it and write
 ## Notes
 
 <Deviations from the spec, judgment calls, or items for follow-up specs. Omit section entirely if nothing to note.>
+
+## References
+
+<The resource entries saved in Step 1, one per line: "- <summary> — <URL>". Omit the section if there were none.>
 ```
 
 Save the shipped document.
@@ -91,7 +102,52 @@ updated: <today YYYY-MM-DD>
 
 Do not leave `current/` unchanged unless the spec was a pure internal refactor with zero observable behaviour change — and even then, note this explicitly.
 
-## Step 5 — Sync stack.md and CLAUDE.md (optional, user-confirmed)
+## Step 5 — Carry forward open notes and tell dependents
+
+Nothing captured against the spec should disappear at graduation.
+
+### 5a. Open notes → inbox seeds
+
+Take the unfolded log entries saved in Step 1, excluding `resource` entries (already preserved in References). For each, decide whether the build resolved it. Propose the unresolved ones as inbox seeds, grouping closely related entries into one seed:
+
+```
+These notes on sync were never folded in and aren't resolved by what shipped:
+  question     Do settings sync, or only content?
+  inspiration  Obsidian-style unresolved-links panel for conflicts
+
+Save them to the inbox as follow-ups? [y / n / edit]
+```
+
+On yes, write each seed to `.curaye/inbox/<kebab-id>.md` (create the folder if needed):
+
+```markdown
+---
+id: <kebab-id>
+title: <short title>
+created: <today>
+source: ship
+follows: <shipped spec id>
+---
+
+<the original entry line or lines>
+```
+
+Skip this sub-step silently if there are no unfolded non-resource entries.
+
+### 5b. Dependents
+
+For each dependent saved in Step 1, the edge is now satisfied by `shipped/`; do not change its `requires` list or its `pins`.
+
+- **Pinned at the shipped revision** — no action.
+- **Stale pin or unpinned** — it was last reviewed against an older contract, or never. Compare what actually shipped (Step 3, including Notes) with what that dependent relies on. If anything it relies on differs, append to the end of its `## Log` section (add the section if missing):
+  ```markdown
+  - <today> · upstream · <shipped id> shipped: <what differs from what this spec assumed>. → unfolded
+  ```
+  Update its `updated` field. If nothing it relies on differs, make no change.
+
+Mention any notified dependents in the report so the user can run `/curaye-spec <id>` on them.
+
+## Step 6 — Sync stack.md and CLAUDE.md (optional, user-confirmed)
 
 Reason about whether what just shipped has implications for the two meta-documents. These are not updated on every ship — only when something structurally changed.
 
@@ -131,7 +187,7 @@ Wait for the user's response before writing. If they say `edit`, show the exact 
 
 When approved, write the changes. Update the `updated` frontmatter field in `stack.md` if it has one.
 
-## Step 6 — Commit
+## Step 7 — Commit
 
 Stage only `.curaye/` changes. Derive the commit scope from the spec's first tag that maps to a CLAUDE.md scope (`cli`, `desktop`, `web`, `core`, `protocol`, `ai`, `sync`, `ui`, `shared`). Fall back to `spec`.
 
@@ -141,6 +197,7 @@ git commit -m "$(cat <<'HEREDOC'
 feat(<scope>): ship <spec-title>
 
 Graduated planned/<id> → shipped/<id>. Updated current/<domains>.
+<If inbox seeds were created or dependents notified, add a line saying so.>
 <If stack.md or CLAUDE.md were updated, add a line: Updated stack.md / CLAUDE.md.>
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
@@ -148,11 +205,13 @@ HEREDOC
 )"
 ```
 
-## Step 6 — Report
+## Step 8 — Report
 
 - Spec shipped: id and title
 - Shipped document: path
 - current/ documents updated or created: list
+- Inbox seeds created: list, or omit if none
+- Dependents notified: list with one-line reason each, or omit if none
 - Commit: hash
 
 "Ship complete. The living truth layer has been updated."
