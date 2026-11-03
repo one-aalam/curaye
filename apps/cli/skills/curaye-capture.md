@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.3 -->
+<!-- curaye-skill: v0.0.4 -->
 ---
 name: curaye-capture
 description: Quickly capture a link, discovery, inspiration, or open question into a Curaye project — appended to the right planned spec's Log, or saved as an inbox seed when it belongs to no spec yet. Never changes a spec's contract. Use mid-session the moment something relevant comes up. Pass the thing to capture as an argument, or omit to capture what was just discussed.

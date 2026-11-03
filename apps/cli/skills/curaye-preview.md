@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.3 -->
+<!-- curaye-skill: v0.0.4 -->
 ---
 name: curaye-preview
 description: Preview how a Curaye spec will be built before building it — screens and states for UI work, a sample terminal session for CLI work, signatures for libraries, before/after layouts for data and refactors — then store the approved approach with the spec so it can be compared with what lands. Use before /curaye-build on any non-trivial spec; /curaye-build also runs it automatically for effort m and up or UI work. Pass a spec id.

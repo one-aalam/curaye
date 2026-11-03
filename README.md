@@ -41,7 +41,7 @@ curaye search "auth" # search across all registered projects
 
 ### Claude Code skills (intelligent layer)
 
-Nine skills ship with the CLI and are installed once into Claude Code. The skills do what the CLI cannot: reasoning, comprehension, and conversation. They call the CLI for mechanical operations and use LLM judgment for everything else — conducting a project interview, writing meaningful `current/` updates, or interpreting drift findings.
+Ten skills ship with the CLI and are installed once into Claude Code. The skills do what the CLI cannot: reasoning, comprehension, and conversation. They call the CLI for mechanical operations and use LLM judgment for everything else — conducting a project interview, writing meaningful `current/` updates, or interpreting drift findings.
 
 ```
 /curaye-bootstrap   ← new project interview + scaffold
@@ -53,13 +53,14 @@ Nine skills ship with the CLI and are installed once into Claude Code. The skill
 /curaye-spec        ← turn a session or captured notes into new and amended specs
 /curaye-capture     ← file a link, discovery or idea into a spec's log or the inbox
 /curaye-preview     ← preview how a spec will be built before building it
+/curaye-cohere      ← find overlapping features and drift; record conventions
 ```
 
 ---
 
 ## The `.curaye/` folder
 
-Every project managed by Curaye carries a `.curaye/` folder at its root. Its structure and format are governed by the [Curaye Protocol Standard](.curaye/planned/00-protocol-standard.md).
+Every project managed by Curaye carries a `.curaye/` folder at its root. Its structure and format are governed by the [Curaye Protocol Standard](.curaye/current/protocol-standard.md).
 
 ```
 .curaye/
@@ -71,6 +72,8 @@ Every project managed by Curaye carries a `.curaye/` folder at its root. Its str
   shipped/        ← what was built (the changelog)
   decisions/      ← why things are the way they are
   inbox/          ← ideas not yet specced (optional)
+  conventions.md  ← rules builds follow, each with an example (optional)
+  audits/         ← coherence pass records (optional)
 ```
 
 Curaye is the first project to use itself — the `.curaye/` folder at the root of this repo is exactly what your project's `.curaye/` folder will look like. Browse it to see the format in practice: [`prd.md`](.curaye/prd.md), [`stack.md`](.curaye/stack.md), [`current/`](.curaye/current/), [`planned/`](.curaye/planned/).
@@ -165,4 +168,4 @@ See [`.curaye/stack.md`](.curaye/stack.md).
 
 ## Specs
 
-All planned features are in [`.curaye/planned/`](.curaye/planned/). The [protocol standard](.curaye/planned/00-protocol-standard.md) governs the format every document must follow.
+All planned features are in [`.curaye/planned/`](.curaye/planned/). The [protocol standard](.curaye/current/protocol-standard.md) governs the format every document must follow.

@@ -23,6 +23,7 @@ Read all of the following in full:
 - All files in `.curaye/decisions/` — why things are the way they are
 - The most recent file in `.curaye/shipped/` (if any) — what last shipped
 - Frontmatter and body of every file in `.curaye/inbox/` (if the folder exists) — ideas not yet specced
+- The filename of the most recent file in `.curaye/audits/` (if any) — the last coherence pass
 
 For each planned spec, also work out:
 - **Edges:** its `requires` list of spec ids. If `requires` is missing or empty but the spec has `dependencies` (older Curaye projects), read `dependencies` instead.
@@ -71,6 +72,12 @@ One line per spec, most urgent first (stale edges and upstream entries before
 plain notes): "sync — 4 unfolded (1 question, 2 resources, 1 discovery)",
 "export — behind sync @3→4: chunked payloads may break its AC3".
 Close with: "Run /curaye-spec <id> to fold these in.">
+
+COHERENCE
+<Count shipped/ documents whose `shipped` date is after the last audit's date (all of
+them if there is no audit). Include this section only when the count is 5 or more:
+"8 specs shipped since the last coherence pass (2026-09-14) — run /curaye-cohere."
+or, with no audit yet: "12 specs shipped and no coherence pass yet — run /curaye-cohere --full.">
 
 WHERE YOU LEFT OFF
 <The planned spec with the most recent `updated` date. State its id, title,

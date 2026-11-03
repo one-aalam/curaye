@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.3 -->
+<!-- curaye-skill: v0.0.4 -->
 ---
 name: curaye-spec
 description: Create new specs and evolve existing ones in a Curaye-managed project after a brainstorm, a discovery, or a batch of captured notes. Mines the session, routes each idea to a new spec, an amendment, a log entry, a decision, or the inbox, runs a dependency impact pass on every contract change, and folds approved changes in with a revision bump. Pass a spec id to groom that one spec's unfolded log; omit to work from the current session.

@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.3 -->
+<!-- curaye-skill: v0.0.4 -->
 ---
 name: curaye-import
 description: Import an existing project with no .curaye/ history into the Curaye system. Use when a project has code and possibly existing spec or planning files but has never been tracked under Curaye. Mines the active session context and ingests any existing markdown spec files before running deterministic CLI inference. If no product documentation is found, offers to hand off to /curaye-bootstrap instead. Optionally pass the project path as an argument.

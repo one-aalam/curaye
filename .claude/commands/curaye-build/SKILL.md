@@ -93,18 +93,21 @@ Update the spec's frontmatter:
 
 Save the file. Do not commit yet.
 
-## Step 4 — Read CLAUDE.md
+## Step 4 — Read CLAUDE.md and conventions.md
 
 Read `CLAUDE.md` in full. Pay particular attention to:
 - The package dependency rules — do not add an import that violates the dependency graph
 - The per-package conventions that apply to the package(s) you are about to modify
 - The "What not to build" section
 
+If `.curaye/conventions.md` exists, read it in full too. Each rule names a canonical example: when the build touches that area, follow the rule and open the example to match it. Where a rule and the spec conflict, the spec wins for this build — note the conflict in the Step 7 report so the rule can be revisited.
+
 ## Step 5 — Implement
 
 Implement the feature according to the spec. Hold strictly to:
 - The non-goals — do not implement anything listed there
 - The package boundary rules from CLAUDE.md
+- The rules in `.curaye/conventions.md`, if it exists
 - TypeScript 7.x strict mode — no `any`, no unsafe type assertions
 - Error handling patterns defined in CLAUDE.md for the relevant package
 

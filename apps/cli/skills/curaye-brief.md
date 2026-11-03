@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.3 -->
+<!-- curaye-skill: v0.0.4 -->
 ---
 name: curaye-brief
 description: Generate a structured re-entry brief for a Curaye-managed project. Use when returning to a project after time away or before starting a work session. Reads prd.md, stack.md, current/, planned/, inbox/, decisions/, and recent shipped/ entries, then synthesises a brief covering current state, planned work, notes waiting to be folded, where you left off, decisions to revisit, a suggested first step, and a vision check.
@@ -24,6 +24,7 @@ Read all of the following in full:
 - All files in `.curaye/decisions/` — why things are the way they are
 - The most recent file in `.curaye/shipped/` (if any) — what last shipped
 - Frontmatter and body of every file in `.curaye/inbox/` (if the folder exists) — ideas not yet specced
+- The filename of the most recent file in `.curaye/audits/` (if any) — the last coherence pass
 
 For each planned spec, also work out:
 - **Edges:** its `requires` list of spec ids. If `requires` is missing or empty but the spec has `dependencies` (older Curaye projects), read `dependencies` instead.
@@ -72,6 +73,12 @@ One line per spec, most urgent first (stale edges and upstream entries before
 plain notes): "sync — 4 unfolded (1 question, 2 resources, 1 discovery)",
 "export — behind sync @3→4: chunked payloads may break its AC3".
 Close with: "Run /curaye-spec <id> to fold these in.">
+
+COHERENCE
+<Count shipped/ documents whose `shipped` date is after the last audit's date (all of
+them if there is no audit). Include this section only when the count is 5 or more:
+"8 specs shipped since the last coherence pass (2026-09-14) — run /curaye-cohere."
+or, with no audit yet: "12 specs shipped and no coherence pass yet — run /curaye-cohere --full.">
 
 WHERE YOU LEFT OFF
 <The planned spec with the most recent `updated` date. State its id, title,

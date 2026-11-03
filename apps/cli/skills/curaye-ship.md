@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.3 -->
+<!-- curaye-skill: v0.0.4 -->
 ---
 name: curaye-ship
 description: Graduate a completed Curaye spec from planned/ to shipped/, update the current/ layer, and optionally sync stack.md and CLAUDE.md. Use after /curaye-build when the implementation is done. The CLI handles mechanical file operations; this skill writes the current/ update with LLM comprehension, then proposes targeted edits to stack.md and CLAUDE.md when what shipped affects the tech stack or agent conventions. Pass the spec id as an argument.

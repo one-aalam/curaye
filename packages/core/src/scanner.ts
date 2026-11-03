@@ -28,6 +28,8 @@ export interface ProjectIndex {
     prd: ParsedDocument<RootDocFrontmatter> | null
     stack: ParsedDocument<RootDocFrontmatter> | null
     product: ParsedDocument<RootDocFrontmatter> | null
+    /** Optional `conventions.md`. Absent → `null`, with no scan warning. */
+    conventions: ParsedDocument<RootDocFrontmatter> | null
   }
   planned: ParsedDocument<PlannedFrontmatter>[]
   current: ParsedDocument<CurrentFrontmatter>[]
@@ -41,11 +43,14 @@ export interface ProjectIndex {
 async function readRootDoc(
   filePath: string,
   warnings: ScanWarning[],
+  options: { optional?: boolean } = {},
 ): Promise<ParsedDocument<RootDocFrontmatter> | null> {
   try {
     await fs.access(filePath)
   } catch {
-    warnings.push({ path: filePath, message: `Root document not found: ${path.basename(filePath)}` })
+    if (options.optional !== true) {
+      warnings.push({ path: filePath, message: `Root document not found: ${path.basename(filePath)}` })
+    }
     return null
   }
   const raw = await fs.readFile(filePath, 'utf8')
@@ -105,10 +110,11 @@ export async function scanProject(curiyePath: string): Promise<ProjectIndex> {
   const warnings: ScanWarning[] = []
   const drafts: ParsedDocument[] = []
 
-  const [prd, stack, product, planned, current, shipped, decisions, releases] = await Promise.all([
+  const [prd, stack, product, conventions, planned, current, shipped, decisions, releases] = await Promise.all([
     readRootDoc(path.join(curiyePath, 'prd.md'), warnings),
     readRootDoc(path.join(curiyePath, 'stack.md'), warnings),
-    readRootDoc(path.join(curiyePath, 'product.md'), warnings),
+    readRootDoc(path.join(curiyePath, 'product.md'), warnings, { optional: true }),
+    readRootDoc(path.join(curiyePath, 'conventions.md'), warnings, { optional: true }),
     scanFolder<PlannedFrontmatter>(path.join(curiyePath, 'planned'), 'planned', drafts, warnings),
     scanFolder<CurrentFrontmatter>(path.join(curiyePath, 'current'), 'current', drafts, warnings),
     scanFolder<ShippedFrontmatter>(path.join(curiyePath, 'shipped'), 'shipped', drafts, warnings),
@@ -121,7 +127,7 @@ export async function scanProject(curiyePath: string): Promise<ProjectIndex> {
   return {
     projectId,
     curiyePath,
-    root: { prd, stack, product },
+    root: { prd, stack, product, conventions },
     planned,
     current,
     shipped,
