@@ -8,7 +8,7 @@ desire: medium
 requires: [package-core]
 tags: [web]
 created: 2026-07-21
-updated: 2026-07-21
+updated: 2026-11-03
 ---
 
 # Web Viewer — Static Read-Only Site
@@ -84,3 +84,7 @@ The `@curaye/ui` package provides shared components for status badges and docume
 6. The site builds with zero errors on the Curaye project's own `.curaye/` content.
 7. All pages are valid HTML with semantic structure (headings, nav, main).
 8. The site works without JavaScript enabled (static HTML only).
+
+## Log
+
+- 2026-11-03 · inspiration · Render `.curaye/previews/<id>/` mockups beside each spec, once approach-preview ships. → unfolded

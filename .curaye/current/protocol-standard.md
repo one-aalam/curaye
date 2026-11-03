@@ -2,7 +2,7 @@
 id: protocol-standard
 title: Curaye Protocol Standard
 domain: protocol
-updated: 2026-07-21
+updated: 2026-11-03
 ---
 
 # Curaye Protocol Standard
@@ -22,6 +22,7 @@ The Curaye Protocol Standard (version 1) defines the canonical format for all `.
   planned/         ← required (may be empty)
   shipped/         ← required (may be empty)
   decisions/       ← optional
+  inbox/           ← optional; ideas not yet specced (not scanned)
 ```
 
 Parsers surface a warning (not an error) for missing required folders. Absence of `product.md` or `decisions/` is silent.
@@ -47,6 +48,34 @@ All documents open with a YAML 1.2 frontmatter block. Unknown keys are preserved
 | `decisions/` | `id`, `title`, `status`, `date` |
 
 `planned/` status values: `draft | ready | building | done | shelved`
+
+## Spec evolution conventions
+
+These conventions are maintained by the `/curaye-spec` and `/curaye-capture` skills. They need no schema support: extension fields pass through `.passthrough()` and surface as `Info` validation entries.
+
+**Extension fields on `planned/` documents**
+
+| Field | Meaning |
+|---|---|
+| `revision` | Contract revision. Bumped when Problem, Goal, Non-goals, feature sections or acceptance criteria change in meaning. Missing means 1. |
+| `last_folded` | Date of the last fold-in of log entries. |
+| `pins` | Map of upstream id → the upstream `revision` this spec was last reviewed against, e.g. `pins: {sync: 3}`. Keys correspond to `requires` entries, which stay plain ids. |
+| `follows` | The shipped spec this one continues. |
+| `related` | Soft links to other specs; no impact tracking. |
+
+A spec is stale against an upstream when its pin is lower than the upstream's `revision`. Dependents are always computed from `requires`; no reverse field is stored. Older projects may use `dependencies` in place of `requires`; the skills read it as a fallback and rename it on their next edit.
+
+**`## Log` section**
+
+The last section of a planned spec. Append-only, one entry per line: `- YYYY-MM-DD · <type> · <summary>`, ending in `→ unfolded` until a fold-in reviews it. Types: `resource`, `discovery`, `inspiration`, `question`, `decision-candidate`, `upstream`, `origin`, `folded`. The Log is not part of the contract.
+
+**Acceptance criteria numbering**
+
+Criteria are never renumbered. A removed criterion keeps its number as `N. *(removed in rev R — see Log)*`.
+
+**`inbox/`**
+
+One file per idea that belongs to no spec yet, with `id`, `title`, `created` and `source` frontmatter. A seed graduates to `planned/` once it has a Problem and a Goal.
 
 ## Validation model
 
