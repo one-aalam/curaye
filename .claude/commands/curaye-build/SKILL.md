@@ -60,6 +60,29 @@ Before building api-client:
 
 Shelved dependencies, stale dependencies, upstream notes and open questions default to option 1; plain resources and inspirations never block. Wait for the user's choice. If they choose to build anyway, note it in the Step 7 report.
 
+### Approach preview
+
+Decide whether this build needs an approved approach first. It does when **both** hold:
+
+- The spec has effort `m`, `l` or `xl`, **or** it is UI work: its tags include `ui`, `desktop` or `web`, or it adds or changes screens, views, panels or modals.
+- It has no `## Approach` section, or its approach is stale: `approach_rev` is missing or lower than `revision` (missing `revision` counts as 1).
+
+When it does, ask:
+
+```
+api-client is an effort-m CLI build with no approved approach.
+Preview the approach first? [y / skip]
+```
+
+- `y` (the default) — follow the `/curaye-preview` skill's steps for this spec, then return here. If the approach is approved, that approval stands in for the summary confirmation below: state the acceptance criteria count and go to Step 3. If it is discarded, continue with the summary.
+- `skip` — append `- <today> · approach · skipped at build` to the spec's Log and continue with the summary.
+
+When the spec already has a current approved approach, read its `## Approach` section: it is how you will build this. Mention it in the summary ("Following the approach approved against rev N").
+
+For `xs` and `s` specs that are not UI work, skip this sub-step entirely.
+
+### Summary
+
 Summarise what you are about to build in 3–5 sentences and state the acceptance criteria count (excluding removed ones). Wait for the user to confirm before touching any code.
 
 ## Step 3 — Mark as building
@@ -87,6 +110,8 @@ Implement the feature according to the spec. Hold strictly to:
 
 Work through the acceptance criteria methodically. After completing each criterion, mentally verify it is satisfied before moving to the next.
 
+If the spec has an approved `## Approach`, follow it. When you need to deviate — a different file layout, a changed interface, a screen that works differently — do it when it is the right call, and keep a note of each deviation and why. `/curaye-ship` records them.
+
 ## Step 6 — Verify acceptance criteria
 
 Go through the acceptance criteria list from the spec one by one. For each:
@@ -103,6 +128,7 @@ When all criteria are satisfied, report:
 - Any criteria that required interpretation or judgment calls
 - Anything that should be addressed in a follow-up spec
 - If readiness warnings were overridden in Step 2, say which
+- If the spec has an approved approach: each deviation from it and why, or "built as approached"
 
 Offer to record discoveries made during the build: "Capture these as log notes? I can run `/curaye-capture`." Do not edit the spec's contract yourself; changes to it go through `/curaye-spec`.
 

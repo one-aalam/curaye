@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.2 -->
+<!-- curaye-skill: v0.0.3 -->
 ---
 name: curaye-brief
 description: Generate a structured re-entry brief for a Curaye-managed project. Use when returning to a project after time away or before starting a work session. Reads prd.md, stack.md, current/, planned/, inbox/, decisions/, and recent shipped/ entries, then synthesises a brief covering current state, planned work, notes waiting to be folded, where you left off, decisions to revisit, a suggested first step, and a vision check.

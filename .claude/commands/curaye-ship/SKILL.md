@@ -24,6 +24,7 @@ If `status` is `draft` or `ready`, stop: "This spec has not been built. Run `/cu
 
 **Save what the CLI is about to delete.** `curaye ship` removes the planned file in Step 2, so collect these now and keep them for later steps:
 - The spec's `revision` (missing counts as 1)
+- Its `## Approach` section in full and its `approach_rev`, if present, plus the Log's `approach` entries (approved, revised, or skipped at build)
 - From its `## Log` section (if any):
   - every `resource` entry (summary and URL), folded or not
   - every entry still ending in `→ unfolded`, of any type
@@ -57,6 +58,11 @@ The CLI creates the `shipped/` document with frontmatter only. Open it and write
 ## What shipped
 
 <2–4 specific sentences describing what was actually built. Reference concrete things: interfaces exported, commands added, files created, behaviour that now exists. This is the permanent historical record — be precise.>
+
+## Approach vs landed
+
+<Include only if the spec had an `## Approach` section. Open with one line: "Built as approached (rev N)." or "Built from the approach approved against rev N, with these deviations:". Then one line per deviation: "<planned> → <landed> — <why>". Take deviations from the build report in this session, then confirm against the code as it now is: compare the approach's Files list, interfaces, output and screens with what exists. If the approach was stale when building started, say so. Link any mockups: `.curaye/previews/<id>/<file>.html`.
+If the Log shows the approach was skipped at build, write only "Approach preview skipped at build." Omit the section entirely if neither applies.>
 
 ## Changes to current/
 

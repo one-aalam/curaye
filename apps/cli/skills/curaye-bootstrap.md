@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.2 -->
+<!-- curaye-skill: v0.0.3 -->
 ---
 name: curaye-bootstrap
 description: Bootstrap a new project with a .curaye/ folder. Use when starting a project that has never been tracked under Curaye. Mines the active session context first — if you have been brainstorming, the answers are already in the conversation. Falls back to a targeted interview only for genuine gaps. Generates multiple planned specs from session output, not just one. Optionally pass the project path as an argument.

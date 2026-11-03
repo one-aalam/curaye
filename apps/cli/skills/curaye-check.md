@@ -1,4 +1,4 @@
-<!-- curaye-skill: v0.0.2 -->
+<!-- curaye-skill: v0.0.3 -->
 ---
 name: curaye-check
 description: Detect and resolve drift between a project and its adopted shared-layer documents. Use when you suspect a project has diverged from shared patterns or when shared documents have been updated. Calls the CLI for deterministic comparison, interprets each finding with LLM judgment, and walks through resolutions interactively. Optionally pass a project id as an argument.

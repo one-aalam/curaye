@@ -16,6 +16,7 @@ type SkillName =
   | 'curaye-check'
   | 'curaye-spec'
   | 'curaye-capture'
+  | 'curaye-preview'
 
 const SKILL_NAMES: readonly SkillName[] = [
   'curaye-build',
@@ -26,6 +27,7 @@ const SKILL_NAMES: readonly SkillName[] = [
   'curaye-check',
   'curaye-spec',
   'curaye-capture',
+  'curaye-preview',
 ]
 
 function describeSkill(name: SkillName): string {
@@ -46,6 +48,8 @@ function describeSkill(name: SkillName): string {
       return 'Create and evolve specs from a session'
     case 'curaye-capture':
       return 'Capture a note into a spec log or inbox'
+    case 'curaye-preview':
+      return 'Preview how a spec will be built'
   }
 }
 

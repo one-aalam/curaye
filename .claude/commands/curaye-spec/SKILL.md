@@ -86,8 +86,8 @@ Never write a value the schema would reject: `status`, `effort`, `impact`, and `
 ```
 
 - One entry per line: `- YYYY-MM-DD · <type> · <summary>`, optional indented detail lines underneath.
-- Types: `resource`, `discovery`, `inspiration`, `question`, `decision-candidate`, `upstream`, `origin`, `folded`.
-- Every new entry except `origin` and `folded` ends with ` → unfolded`. "Unfolded" means "not yet reviewed in a fold-in", not "must change the contract".
+- Types: `resource`, `discovery`, `inspiration`, `question`, `decision-candidate`, `upstream`, `origin`, `folded`, `approach`.
+- Every new entry except `origin`, `folded` and `approach` ends with ` → unfolded`. `approach` entries are written by `/curaye-preview` and `/curaye-build`. "Unfolded" means "not yet reviewed in a fold-in", not "must change the contract".
 - The **only** permitted edit to an existing entry is removing its ` → unfolded` marker when a fold-in reviews it. Never rewrite or delete entries.
 
 ### Acceptance criteria numbering
@@ -249,6 +249,7 @@ Proceed? [y / edit / amend dependents now]
 - `done` — route to FOLLOW-UP, not AMEND.
 - `shelved` — LOG only, flagged. If the session clearly revives it, offer: "Unshelve <id> and amend it?" On yes, set `status: draft` and route as AMEND.
 - Shipped — FOLLOW-UP only.
+- Has an `## Approach` and the plan bumps its `revision` — flag: "<id>'s approach was approved against rev N and becomes stale; run `/curaye-preview <id>` before building." Never edit the `## Approach` section yourself.
 
 For any BREAKING dependent with `status: building`, ask the user to choose before writing:
 ```

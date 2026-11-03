@@ -41,7 +41,7 @@ curaye search "auth" # search across all registered projects
 
 ### Claude Code skills (intelligent layer)
 
-Eight skills ship with the CLI and are installed once into Claude Code. The skills do what the CLI cannot: reasoning, comprehension, and conversation. They call the CLI for mechanical operations and use LLM judgment for everything else — conducting a project interview, writing meaningful `current/` updates, or interpreting drift findings.
+Nine skills ship with the CLI and are installed once into Claude Code. The skills do what the CLI cannot: reasoning, comprehension, and conversation. They call the CLI for mechanical operations and use LLM judgment for everything else — conducting a project interview, writing meaningful `current/` updates, or interpreting drift findings.
 
 ```
 /curaye-bootstrap   ← new project interview + scaffold
@@ -52,6 +52,7 @@ Eight skills ship with the CLI and are installed once into Claude Code. The skil
 /curaye-check       ← drift detection with interactive resolution
 /curaye-spec        ← turn a session or captured notes into new and amended specs
 /curaye-capture     ← file a link, discovery or idea into a spec's log or the inbox
+/curaye-preview     ← preview how a spec will be built before building it
 ```
 
 ---
