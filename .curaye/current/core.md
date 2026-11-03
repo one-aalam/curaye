@@ -2,7 +2,7 @@
 id: core
 title: "@curaye/core — Project Scanner & Registry"
 domain: core
-updated: 2026-07-24
+updated: 2026-11-03
 ---
 
 # @curaye/core — Project Scanner & Registry
@@ -17,7 +17,7 @@ updated: 2026-07-24
 async function scanProject(curiyePath: string): Promise<ProjectIndex>
 ```
 
-Recursively scans a `.curaye/` folder. Returns a `ProjectIndex` with typed arrays for `planned`, `current`, `shipped`, `decisions`, `releases`, and `drafts`, plus a `warnings` array for non-fatal issues (missing root docs, unreadable files). Documents are sorted by numeric prefix, then alphabetically. Throws `CurayeNotFoundError` only if `curiyePath` does not exist. Never throws for missing documents or validation failures.
+Recursively scans a `.curaye/` folder. Returns a `ProjectIndex` with typed arrays for `planned`, `current`, `shipped`, `decisions`, `releases`, and `drafts`, plus a `warnings` array for non-fatal issues (a missing `prd.md` or `stack.md`, unreadable files). The optional root documents `product.md` and `conventions.md` are read when present and return `null` without a warning when absent. Documents are sorted by numeric prefix, then alphabetically. Throws `CurayeNotFoundError` only if `curiyePath` does not exist. Never throws for missing documents or validation failures.
 
 ```ts
 interface ProjectIndex {
@@ -26,7 +26,8 @@ interface ProjectIndex {
   root: {
     prd:     ParsedDocument<RootDocFrontmatter> | null
     stack:   ParsedDocument<RootDocFrontmatter> | null
-    product: ParsedDocument<RootDocFrontmatter> | null
+    product:     ParsedDocument<RootDocFrontmatter> | null   // optional
+    conventions: ParsedDocument<RootDocFrontmatter> | null   // optional
   }
   planned:   ParsedDocument<PlannedFrontmatter>[]
   current:   ParsedDocument<CurrentFrontmatter>[]
@@ -38,7 +39,7 @@ interface ProjectIndex {
 }
 ```
 
-A missing `.curaye/releases/` folder produces an empty array and a non-fatal warning — never an error.
+A missing `.curaye/releases/` folder produces an empty array and a non-fatal warning — never an error. Folders outside the scanned set (`inbox/`, `previews/`, `audits/`, `briefs/`, `agent-log/`) are ignored.
 
 ## `readDocument` / `writeDocument`
 

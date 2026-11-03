@@ -13,6 +13,7 @@ Every feature in this project has a spec in `.curaye/planned/`. Before implement
 1. Read the relevant spec file. It defines the problem, goal, non-goals, data structures, and acceptance criteria.
 2. The spec's acceptance criteria are the definition of done — implementation is complete when all criteria pass.
 3. If the spec and this file conflict, the spec wins for feature behaviour; this file wins for code conventions.
+4. Read `.curaye/conventions.md` — project-wide rules, each with a canonical example file to match. `/curaye-cohere` maintains it; add a rule there rather than here when a pattern should hold across the codebase.
 
 When a feature ships, update its status:
 - Move the spec from `.curaye/planned/` to `.curaye/shipped/`
@@ -60,7 +61,7 @@ Violating these rules is a blocking issue. Fix it before merging.
 
 ## Protocol standard
 
-The `.curaye/` folder format is governed by `.curaye/planned/00-protocol-standard.md`. This is the authoritative spec for:
+The `.curaye/` folder format is governed by `.curaye/current/protocol-standard.md`. This is the authoritative spec for:
 - Folder layout and file naming
 - Frontmatter schemas per document type
 - Required and optional body sections

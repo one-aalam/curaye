@@ -18,15 +18,17 @@ The Curaye Protocol Standard (version 1) defines the canonical format for all `.
   prd.md           ← required
   stack.md         ← required
   product.md       ← optional
+  conventions.md   ← optional; project conventions (scanned as a root doc)
   current/         ← required (may be empty)
   planned/         ← required (may be empty)
   shipped/         ← required (may be empty)
   decisions/       ← optional
   inbox/           ← optional; ideas not yet specced (not scanned)
   previews/        ← optional; approach mockups, previews/<spec-id>/*.html (not scanned)
+  audits/          ← optional; coherence pass records, audits/YYYY-MM-DD.md (not scanned)
 ```
 
-Parsers surface a warning (not an error) for missing required folders. Absence of `product.md` or `decisions/` is silent.
+Parsers surface a warning (not an error) for missing required folders. Absence of `product.md`, `conventions.md` or `decisions/` is silent.
 
 ## File naming
 
@@ -42,7 +44,7 @@ All documents open with a YAML 1.2 frontmatter block. Unknown keys are preserved
 
 | Document type | Required fields |
 |---|---|
-| Root (`prd.md`, `stack.md`, `product.md`) | `updated` |
+| Root (`prd.md`, `stack.md`, `product.md`, `conventions.md`) | `updated` |
 | `planned/` | `id` (or derived), `title`, `status`, `effort`, `created`, `updated` |
 | `current/` | `id`, `title`, `domain`, `updated` |
 | `shipped/` | `id`, `title`, `shipped` |
@@ -82,6 +84,12 @@ Criteria are never renumbered. A removed criterion keeps its number as `N. *(rem
 **`inbox/`**
 
 One file per idea that belongs to no spec yet, with `id`, `title`, `created` and `source` frontmatter. A seed graduates to `planned/` once it has a Problem and a Goal.
+
+## Conventions and audits
+
+**`conventions.md`** — an optional root document with `updated` frontmatter, scanned into `ProjectIndex.root.conventions` (`null` when absent, with no warning). Rules sit under `## UI`, `## UX`, `## CLI` and `## Code`; each is a bold name, one or two lines, and `Example: <path>` naming a file that already follows it. `/curaye-cohere` proposes and writes rules; `/curaye-build` and `/curaye-preview` read them.
+
+**`audits/YYYY-MM-DD.md`** — one record per `/curaye-cohere` run (`-2`, `-3` for same-day reruns), with `generated`, `scope` (`incremental` or `full`) and, for incremental runs, `since` frontmatter; sections Summary, Findings (each with an outcome), Actions taken, Conventions added. The latest audit's date sets the window for the next incremental pass. Not scanned.
 
 ## Validation model
 
