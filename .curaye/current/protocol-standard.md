@@ -23,6 +23,7 @@ The Curaye Protocol Standard (version 1) defines the canonical format for all `.
   shipped/         ← required (may be empty)
   decisions/       ← optional
   inbox/           ← optional; ideas not yet specced (not scanned)
+  previews/        ← optional; approach mockups, previews/<spec-id>/*.html (not scanned)
 ```
 
 Parsers surface a warning (not an error) for missing required folders. Absence of `product.md` or `decisions/` is silent.
@@ -51,7 +52,7 @@ All documents open with a YAML 1.2 frontmatter block. Unknown keys are preserved
 
 ## Spec evolution conventions
 
-These conventions are maintained by the `/curaye-spec` and `/curaye-capture` skills. They need no schema support: extension fields pass through `.passthrough()` and surface as `Info` validation entries.
+These conventions are maintained by the `/curaye-spec`, `/curaye-capture` and `/curaye-preview` skills. They need no schema support: extension fields pass through `.passthrough()` and surface as `Info` validation entries.
 
 **Extension fields on `planned/` documents**
 
@@ -62,12 +63,17 @@ These conventions are maintained by the `/curaye-spec` and `/curaye-capture` ski
 | `pins` | Map of upstream id → the upstream `revision` this spec was last reviewed against, e.g. `pins: {sync: 3}`. Keys correspond to `requires` entries, which stay plain ids. |
 | `follows` | The shipped spec this one continues. |
 | `related` | Soft links to other specs; no impact tracking. |
+| `approach_rev` | The `revision` the spec's `## Approach` was approved against. Lower than `revision`, or missing while an `## Approach` exists, means the approach is stale. |
 
 A spec is stale against an upstream when its pin is lower than the upstream's `revision`. Dependents are always computed from `requires`; no reverse field is stored. Older projects may use `dependencies` in place of `requires`; the skills read it as a fallback and rename it on their next edit.
 
 **`## Log` section**
 
-The last section of a planned spec. Append-only, one entry per line: `- YYYY-MM-DD · <type> · <summary>`, ending in `→ unfolded` until a fold-in reviews it. Types: `resource`, `discovery`, `inspiration`, `question`, `decision-candidate`, `upstream`, `origin`, `folded`. The Log is not part of the contract.
+The last section of a planned spec. Append-only, one entry per line: `- YYYY-MM-DD · <type> · <summary>`, ending in `→ unfolded` until a fold-in reviews it. Types: `resource`, `discovery`, `inspiration`, `question`, `decision-candidate`, `upstream`, `origin`, `folded`, `approach`. `origin`, `folded` and `approach` entries never carry `→ unfolded`. The Log is not part of the contract.
+
+**`## Approach` section**
+
+Written by `/curaye-preview` when an approach is approved, between `## Acceptance criteria` and `## Log`. It records how the spec will be built and what it will look like. It is not part of the contract: revising it does not bump `revision` or affect dependents, and the acceptance criteria remain the definition of done. At ship, the shipped document's "Approach vs landed" section compares it with what was built.
 
 **Acceptance criteria numbering**
 
