@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { renderPlannedSpec } from "@curaye/protocol";
 import { invoke } from "@tauri-apps/api/core";
 import { fetchAiConfig, fetchEmbedding, streamCompletion, type AiProviderConfig, type AiMessage } from "@/lib/aiClient";
 import { useProjectStore } from "@/stores/projectStore";
@@ -273,32 +274,16 @@ function buildMessages(action: ResolvedAction, context: PaletteContext): AiMessa
 
       const title = action.param ?? "Untitled Feature";
       const id = slugify(title);
+      const skeleton = renderPlannedSpec({ id, title, source: "curaye new", today });
+      // Strip ## Log from AI prompt — only frontmatter + section skeleton is sent
+      const promptSkeleton = skeleton.replace(/\n## Log[\s\S]*$/, "");
       msgs.push({
         role: "user",
         content: `Generate a Curaye spec for: "${title}".
 
 Respond with ONLY the file content below — no code fences, no intro text, no title heading in the body. Keep the frontmatter exactly as shown.
 
----
-id: ${id}
-title: ${title}
-status: draft
-effort: m
-impact: medium
-desire: medium
-created: ${today}
-updated: ${today}
----
-
-## Problem
-
-## Goal
-
-## Non-goals
-
-## Acceptance criteria
-
-1.
+${promptSkeleton}
 
 Fill in every body section now with specific, practical content for "${title}".`,
       });

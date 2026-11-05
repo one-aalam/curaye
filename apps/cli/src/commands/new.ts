@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import { intro, outro } from '@clack/prompts'
 import { ProjectRegistry } from '@curaye/core'
+import { renderPlannedSpec } from '@curaye/protocol'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
 import { resolveProject, today } from '../lib/context.js'
 import { openInEditor } from '../lib/editor.js'
@@ -62,31 +63,7 @@ tags: []
 ## Alternatives considered
 `
       } else {
-        content = `---
-id: ${id}
-title: "${title}"
-status: draft
-effort: m
-impact: medium
-desire: medium
-requires: []
-tags: []
-created: ${today()}
-updated: ${today()}
----
-
-# ${title}
-
-## Problem
-
-## Goal
-
-## Non-goals
-
-## Acceptance criteria
-
-1.
-`
+        content = renderPlannedSpec({ id, title, source: 'curaye new', today: today() })
       }
 
       await fs.writeFile(destPath, content, 'utf8')

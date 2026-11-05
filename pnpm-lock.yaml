@@ -54,6 +54,9 @@ importers:
       '@curaye/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@curaye/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@curaye/sync':
         specifier: workspace:*
         version: link:../../packages/sync

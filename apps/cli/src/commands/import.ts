@@ -5,6 +5,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { intro, outro, confirm, isCancel, spinner, log } from '@clack/prompts'
 import { ProjectRegistry } from '@curaye/core'
+import { renderPlannedSpec } from '@curaye/protocol'
 import { readAiConfig, isAvailable, createProvider } from '@curaye/ai'
 import type { Provider } from '@curaye/ai'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
@@ -543,40 +544,7 @@ function slugify(text: string): string {
 
 function buildPlannedSpec(title: string): string {
   const id = slugify(title)
-  return `---
-id: ${id}
-title: "${title}"
-status: draft
-effort: m
-impact: medium
-desire: medium
-requires: []
-tags: []
-created: ${today()}
-updated: ${today()}
-confidence: inferred
----
-
-# ${title}
-
-> Describe what this feature does and why it matters.
-
-## Problem
-
--
-
-## Goal
-
--
-
-## Non-goals
-
--
-
-## Acceptance criteria
-
-1.
-`
+  return renderPlannedSpec({ id, title, source: 'curaye import', today: today(), confidence: 'inferred' })
 }
 
 function buildDeprecatedDecision(name: string): string {

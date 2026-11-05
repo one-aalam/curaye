@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import { intro, outro, text, confirm, isCancel, spinner } from '@clack/prompts'
 import { ProjectRegistry, scanProject } from '@curaye/core'
+import { renderPlannedSpec } from '@curaye/protocol'
 import { readAiConfig, isAvailable } from '@curaye/ai'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
 import { resolveProject, today } from '../lib/context.js'
@@ -64,44 +65,12 @@ export function registerAi(program: Command): void {
       const s = spinner()
       if (!isJsonMode()) s.start('Drafting spec…')
 
-      // Minimal spec skeleton conforming to protocol standard
       const id = title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
 
-      const skeleton = `---
-id: ${id}
-title: "${title}"
-status: draft
-effort: m
-impact: medium
-desire: medium
-requires: []
-tags: []
-created: ${today()}
-updated: ${today()}
----
-
-# ${title}
-
-${description ? `> ${description}\n` : ''}
-## Problem
-
-${description || 'Describe the problem this spec addresses.'}
-
-## Goal
-
-Describe the outcome in 1–3 sentences.
-
-## Non-goals
-
--
-
-## Acceptance criteria
-
-1.
-`
+      const skeleton = renderPlannedSpec({ id, title, source: 'curaye ai draft', today: today() })
 
       if (!isJsonMode()) s.stop('Draft ready')
 

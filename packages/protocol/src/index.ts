@@ -23,3 +23,7 @@ export type { ParsedDocument, ValidationResult, ValidationIssue, DocumentType } 
 
 // Functions
 export { parse, validate, deriveId, isDraft, sortOrder } from './functions.js'
+
+// Template
+export { renderPlannedSpec } from './template.js'
+export type { RenderPlannedSpecOptions } from './template.js'

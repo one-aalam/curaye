@@ -4,6 +4,7 @@ import fs from 'fs/promises'
 import os from 'os'
 import { intro, outro, text, select, multiselect, isCancel, spinner, log } from '@clack/prompts'
 import { ProjectRegistry } from '@curaye/core'
+import { renderPlannedSpec } from '@curaye/protocol'
 import { readAiConfig, isAvailable, createProvider } from '@curaye/ai'
 import type { Provider } from '@curaye/ai'
 import { isJsonMode, printJson, printLine, die } from '../lib/output.js'
@@ -144,39 +145,7 @@ updated: ${today()}
 
 function stubPlannedSpec(firstFeature: string): string {
   const id = slugify(firstFeature)
-  return `---
-id: ${id}
-title: "${firstFeature}"
-status: draft
-effort: m
-impact: medium
-desire: medium
-requires: []
-tags: []
-created: ${today()}
-updated: ${today()}
----
-
-# ${firstFeature}
-
-> Describe what this feature does and why it matters.
-
-## Problem
-
-Describe the problem this spec addresses.
-
-## Goal
-
-Describe the outcome in 1–3 sentences.
-
-## Non-goals
-
--
-
-## Acceptance criteria
-
-1.
-`
+  return renderPlannedSpec({ id, title: firstFeature, source: 'curaye bootstrap', today: today() })
 }
 
 async function draftPrdWithAi(provider: Provider, answers: BootstrapAnswers): Promise<string> {
@@ -220,23 +189,9 @@ Write sections: Problem (1-2 sentences), Goal (1-2 sentences), Non-goals (2-3 bu
     },
   ]
   const body = await provider.complete(messages, { maxTokens: 800, temperature: 0.4 })
-  return `---
-id: ${id}
-title: "${answers.firstFeature}"
-status: draft
-effort: m
-impact: medium
-desire: medium
-requires: []
-tags: []
-created: ${today()}
-updated: ${today()}
----
-
-# ${answers.firstFeature}
-
-${body.trim()}
-`
+  const skeleton = renderPlannedSpec({ id, title: answers.firstFeature, source: 'curaye bootstrap', today: today() })
+  // Inject AI body between the heading and ## Log
+  return skeleton.replace(/\n## Log\n/, `\n${body.trim()}\n\n## Log\n`)
 }
 
 export function registerBootstrap(program: Command): void {
