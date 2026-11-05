@@ -93,6 +93,7 @@ File operations in `@curaye/core` never throw for missing or malformed documents
 - One Zod schema per document type, using `.passthrough()` for unknown fields.
 - `parse()` never throws — failures go into `ValidationResult`.
 - `deriveId()`, `isDraft()`, and `sortOrder()` are pure functions with no side effects.
+- Use `renderPlannedSpec()` to create new planned spec content anywhere in the codebase — CLI commands, desktop stores, or any future caller. Never write inline planned-spec frontmatter strings. AI prompt callers strip the `## Log` section from the output before sending the skeleton to the model.
 
 ### `@curaye/core` — file system rules
 

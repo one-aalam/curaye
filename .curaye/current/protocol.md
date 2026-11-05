@@ -2,7 +2,7 @@
 id: protocol
 title: "@curaye/protocol — Schema, Parser & Validator"
 domain: protocol
-updated: 2026-07-23
+updated: 2026-11-05
 ---
 
 # @curaye/protocol — Schema, Parser & Validator
@@ -80,6 +80,28 @@ Returns `true` if the filename starts with `_`.
 
 Returns the leading numeric prefix as a number, or `null` if none is present.
 
+### `renderPlannedSpec(opts: RenderPlannedSpecOptions) → string`
+
+Creates a new planned spec document as a complete markdown string. Accepts `id`, `title`, `source` (the originating command name), an optional `today` (YYYY-MM-DD, defaults to system date), and optional frontmatter fields (`effort`, `impact`, `desire`, `requires`, `tags`, `confidence`, `release`). The returned string includes `revision: 1` and a `## Log` section with a dated `origin` entry naming `source`. Passes `PlannedFrontmatterSchema` validation with no errors.
+
+```ts
+interface RenderPlannedSpecOptions {
+  id: string
+  title: string
+  source: string
+  today?: string
+  effort?: 'xs' | 's' | 'm' | 'l' | 'xl'
+  impact?: 'low' | 'medium' | 'high'
+  desire?: 'low' | 'medium' | 'high'
+  requires?: string[]
+  tags?: string[]
+  confidence?: string
+  release?: string
+}
+```
+
+This is the canonical way to create a new planned spec anywhere in the codebase — CLI commands and the desktop store all call it. AI prompt callers strip the `## Log` section from the output before sending the skeleton to the model.
+
 ## Public entry point
 
-All exports are from `packages/protocol/src/index.ts`. Internal files (`schemas.ts`, `types.ts`, `functions.ts`) must not be imported directly by other packages.
+All exports are from `packages/protocol/src/index.ts`. Internal files (`schemas.ts`, `types.ts`, `functions.ts`, `template.ts`) must not be imported directly by other packages.
