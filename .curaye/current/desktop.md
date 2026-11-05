@@ -2,7 +2,7 @@
 id: desktop
 title: Desktop App
 domain: desktop
-updated: 2026-07-27
+updated: 2026-11-05
 ---
 
 # Desktop App
@@ -135,6 +135,12 @@ Components present: `Switch`, `Tooltip`, `Tabs`, `Dialog`, `Drawer`, `Menu`, `Po
 | `chaadar` | Cotton white — light clean |
 
 Each theme sets full CSS custom property palettes plus `--glass-bg`, `--glass-border`, `--glass-blur`, `--glass-shadow` tokens used by all overlay components.
+
+`glass.css` also defines fifteen status-colour tokens in `:root` — `--status-{draft,ready,building,done,shelved}-{color,surface,border}` — shared across all themes. These are consumed by `src/lib/statusColors.ts`.
+
+## Shared utilities (`src/lib/`)
+
+- **`statusColors.ts`** — exports `statusBadgeClass(status)` (text + background classes) and `statusChipClass(status)` (text + background + border classes) for all five spec statuses (`draft`, `ready`, `building`, `done`, `shelved`) plus an unknown-value fallback. All components that render a spec status badge use these helpers; none defines its own colour map.
 
 ## Package dependency
 

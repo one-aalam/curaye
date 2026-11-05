@@ -7,6 +7,7 @@ import { TabsRoot, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
 import { Select } from "@/components/ui/select";
 import { MarkdownContent } from "@/components/ui/markdown";
 import { TagCombobox, MultiCombobox } from "@/components/ui/combobox";
+import { statusBadgeClass } from "@/lib/statusColors";
 
 // ── Tag field — thin wrapper that reads isHighlighted from store ──────────────
 
@@ -126,15 +127,6 @@ function getDocSection(path: string | null): "planned" | "other" {
   return /[/\\]\.curaye[/\\]planned[/\\]/.test(path) ? "planned" : "other";
 }
 
-// ── Status badge colors ───────────────────────────────────────────────────────
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "text-muted-foreground bg-muted/60",
-  ready: "text-blue-400 bg-blue-400/10",
-  building: "text-amber-400 bg-amber-400/10",
-  done: "text-emerald-400 bg-emerald-400/10",
-  shelved: "text-muted-foreground/40 bg-muted/30",
-};
 
 const STATUS_OPTIONS = ["draft", "ready", "building", "done", "shelved"];
 const EFFORT_OPTIONS = ["xs", "s", "m", "l", "xl"];
@@ -161,7 +153,7 @@ function MetadataStrip({ onEdit }: { onEdit: () => void }) {
         <span
           className={cn(
             "rounded px-1.5 py-0.5 text-[10px] font-medium capitalize",
-            STATUS_COLORS[status] ?? "text-muted-foreground bg-muted/50",
+            statusBadgeClass(status),
           )}
         >
           {status}

@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useBacklogStore, type BacklogSpec, type SortField } from "@/stores/backlogStore";
 import { useViewStore } from "@/stores/viewStore";
+import { statusChipClass } from "@/lib/statusColors";
 
 async function copyBuildCommand(specId: string) {
   await navigator.clipboard.writeText(`/curaye-build ${specId}`);
@@ -39,12 +40,6 @@ const STATUS_CYCLE: Record<string, string> = {
   building: "draft",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
-  ready: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  building: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-};
-
 function StatusChip({
   status,
   specPath,
@@ -66,7 +61,7 @@ function StatusChip({
     }
   };
 
-  const colors = STATUS_COLORS[status] ?? "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
+  const colors = statusChipClass(status);
 
   return (
     <button

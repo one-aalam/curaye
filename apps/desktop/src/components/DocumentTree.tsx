@@ -10,6 +10,7 @@ import { useBriefStore } from "@/stores/briefStore";
 import { PromoteModal } from "@/components/PromoteModal";
 import { MenuRoot, MenuContent, MenuItem } from "@/components/ui/menu";
 import { SearchBar } from "@/components/SearchBar";
+import { statusBadgeClass } from "@/lib/statusColors";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "draft",
@@ -17,14 +18,6 @@ const STATUS_LABEL: Record<string, string> = {
   building: "wip",
   done: "done",
   shelved: "shelved",
-};
-
-const STATUS_BG: Record<string, string> = {
-  draft: "bg-zinc-400/10 text-zinc-400",
-  ready: "bg-blue-400/10 text-blue-400",
-  building: "bg-amber-400/10 text-amber-400",
-  done: "bg-green-500/10 text-green-500",
-  shelved: "bg-zinc-600/10 text-zinc-500",
 };
 
 const SECTION_LABELS: Record<DocSection, string> = {
@@ -48,7 +41,7 @@ function StatusLabel({ status, selected }: { status?: string; selected: boolean 
   const label = STATUS_LABEL[status] ?? status;
   const colors = selected
     ? "bg-primary/15 text-primary/80"
-    : (STATUS_BG[status] ?? "bg-zinc-400/10 text-zinc-400");
+    : statusBadgeClass(status);
   return (
     <span className={cn("text-[9px] font-semibold uppercase tracking-wide flex-shrink-0 px-1.5 py-0.5 rounded", colors)}>
       {label}
