@@ -30,7 +30,7 @@ Three resizable panels separated by drag-handle dividers. Widths are persisted i
 | `write_registry` | Write registry atomically |
 | `link_project` | Append a directory to the registry |
 | `unlink_project` | Remove a project by name |
-| `scan_project` | Scan a `.curaye/` path → `ProjectTree` with all sections (including `releases: Vec<ReleaseSummary>`) |
+| `scan_project` | Scan a `.curaye/` path → `ProjectTree` with all sections (including `releases: Vec<ReleaseSummary>`). Root docs scanned: `prd.md`, `stack.md`, `product.md` (optional), `conventions.md` (optional) — matching `scanProject()` in `@curaye/core`. |
 | `read_document` | Parse frontmatter + body from a file path |
 | `write_document` | Write a document atomically (tmp → rename) |
 | `parse_raw` | Parse raw markdown string → `ParsedDocument` |
@@ -56,7 +56,7 @@ Three resizable panels separated by drag-handle dividers. Widths are persisted i
 | `get_last_opened` | Read when a project was last opened in the desktop from `~/.curaye/desktop-state.json`; returns `Option<String>` date |
 | `set_last_opened` | Write today's date for a project to `~/.curaye/desktop-state.json` |
 | `promote_to_shared` | Promote a `current/` or `decisions/` document to `~/.curaye/shared/<category>/<id>.md`. Injects `source_project`, `promoted`, `adopted_by` frontmatter; notifies other registered projects; optionally adds `promoted_to` to the source. Errors if source is from `planned/` or category is invalid. Returns `PromoteSharedResult { sharedPath, docRef, isUpdate, projectsNotified }`. |
-| `check_project_drift` | Count unresolved drift findings for a project. Delegates to the shared internal `detect_drift_findings` function and returns `findings.len() as u32`. Used to populate the sidebar badge on load and after the Drift Panel closes. |
+| `check_project_drift` | Count `drift`-classified findings for a project (excludes `pending-update`). Delegates to `detect_drift_findings` and returns only findings with `classification == "drift"`. Matches `DriftDetector.countDrift()` in `@curaye/core`. Used to populate the sidebar badge on load and after the Drift Panel closes. |
 | `get_drift_findings` | Return per-finding detail for a project as `Vec<DriftFinding>` (`doc_id`, `doc_ref`, `category`, `classification: "drift" \| "pending-update"`, `shared_path`, `shared_snippet`). Delegates to the same `detect_drift_findings` as `check_project_drift`. Called on demand when the Drift Panel opens — not on the 30-second refresh cycle. |
 | `mark_reviewed` | Copy the current shared doc at `shared_path` to `~/.curaye/shared-reviews/<project_id>/<doc_id>.md` atomically. Creates the directory if absent. Clears the `pending-update` finding for this doc on the next badge check. |
 | `ignore_drift_finding` | Append `{ projectId, docId }` to `~/.curaye/drift-ignores.yaml` atomically, deduplicating before write. Suppresses the finding until the next `curaye sync`. |
@@ -157,6 +157,10 @@ Drift detection is split across two surfaces with different depths:
 **Drift Panel:** `get_drift_findings` calls the same `detect_drift_findings` function and returns `Vec<DriftFinding>` with per-finding detail. It is called on demand when the panel opens — never on the background refresh cycle. The panel provides three mechanical resolution actions (mark reviewed, ignore, record override) without LLM interpretation. The three-stage detection logic (pending-update snapshot check → intentional override scan → keyword-term heuristic) is implemented once in `detect_drift_findings` and shared by both commands.
 
 **LLM-assisted drift analysis** — deeper interpretation, LCS diffs, and interactive resolution — remains in `curaye check` (CLI) and `/curaye-check` (skill). The panel and the CLI skill are complementary, not competing implementations.
+
+## Protocol parity
+
+The desktop Rust layer keeps its own copies of protocol logic (root-document lists, drift-count semantics). These are guarded by `scripts/check-protocol-parity.ts` (`pnpm check:protocol-parity`), which parses both the Rust and TypeScript source files and exits 1 when they disagree. After any change to root-document names or drift-count logic in either `mod.rs` or `packages/core/src/scanner.ts` / `drift-detector.ts`, run this script. The architecture decision is recorded in `decisions/06-desktop-protocol-parity.md`.
 
 ## What is not yet built
 

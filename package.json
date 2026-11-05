@@ -6,9 +6,11 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "clean": "turbo clean"
+    "clean": "turbo clean",
+    "check:protocol-parity": "tsx scripts/check-protocol-parity.ts"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "turbo": "^2.5.0",
     "typescript": "^7.0.2"
   },

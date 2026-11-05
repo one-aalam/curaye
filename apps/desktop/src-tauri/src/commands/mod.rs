@@ -716,7 +716,7 @@ pub async fn scan_project(curaye_path: String) -> Result<ProjectTree, String> {
     scan_section(&base, "decisions", &mut tree.decisions).await;
     tree.releases = scan_releases(curaye_path.clone()).await.unwrap_or_default();
 
-    for name in &["prd.md", "stack.md", "AGENTS.md"] {
+    for name in &["prd.md", "stack.md", "product.md", "conventions.md"] {
         let path = base.join(name);
         if path.exists() {
             tree.root.push(TreeNode {
@@ -2449,7 +2449,8 @@ async fn detect_drift_findings(
 #[command]
 pub async fn check_project_drift(project_name: String, project_path: String) -> Result<u32, String> {
     let findings = detect_drift_findings(&project_name, &project_path).await?;
-    Ok(findings.len() as u32)
+    let drift_count = findings.iter().filter(|f| f.classification == "drift").count();
+    Ok(drift_count as u32)
 }
 
 /// Return full per-finding detail — called on demand when the Drift Panel opens.
